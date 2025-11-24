@@ -16,7 +16,6 @@ Usage:
 
 import casadi as ca
 import numpy as np
-
 from scipy import linalg
 
 

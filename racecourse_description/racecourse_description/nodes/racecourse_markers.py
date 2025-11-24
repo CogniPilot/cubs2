@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import os
+
 import rclpy
+from racecourse_description import MarkerFactory, RacecourseLoader
 from rclpy.node import Node
 from visualization_msgs.msg import MarkerArray
-
-from racecourse_description import RacecourseLoader, MarkerFactory
 
 
 class RacecourseNode(Node):

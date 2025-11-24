@@ -23,10 +23,10 @@ Axis indices (standard gamepad layout):
 """
 
 import rclpy
+from cubs2_msgs.msg import AircraftControl
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
-from cubs2_msgs.msg import AircraftControl
 
 
 class GamepadControlNode(Node):
@@ -34,15 +34,18 @@ class GamepadControlNode(Node):
         super().__init__("gamepad_control")
 
         # Declare parameters for axis mapping (can be overridden)
-        self.declare_parameter("axis_throttle", 1)  # Left stick Y
-        self.declare_parameter("axis_rudder", 0)  # Left stick X
-        self.declare_parameter("axis_elevator", 4)  # Right stick Y
         self.declare_parameter("axis_aileron", 3)  # Right stick X
-        self.declare_parameter("throttle_default", 0.5)  # Default throttle
-        self.declare_parameter("invert_elevator", False)  # Invert elevator axis
-        self.declare_parameter("invert_aileron", False)  # Invert aileron axis
-        self.declare_parameter("invert_rudder", False)  # Invert rudder axis
+        self.declare_parameter("axis_elevator", 4)  # Right stick Y
+        self.declare_parameter("axis_rudder", 0)  # Left stick X
+        self.declare_parameter("axis_throttle", 1)  # Left stick Y
+
+        self.declare_parameter("invert_aileron", True)  # Invert aileron axis
+        self.declare_parameter("invert_elevator", True)  # Invert elevator axis
+        self.declare_parameter("invert_rudder", True)  # Invert rudder axis
         self.declare_parameter("invert_throttle", False)  # Invert throttle axis
+
+        self.declare_parameter("throttle_default", 0.0)  # Default throttle
+
         self.declare_parameter("deadzone", 0.05)  # Deadzone for stick drift
 
         # Get parameters

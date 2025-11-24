@@ -26,13 +26,11 @@ Panels:
     Name: Time
     SyncMode: 0
     SyncSource: ""
-  - Class: fixed_wing_purt::RvizPanel
-    Name: RvizPanel
-  - Class: fixed_wing_purt::JoyPanel
+  - Class: cubs2::JoyPanel
     Name: JoyPanel
-  - Class: fixed_wing_purt::SimPanel
+  - Class: cubs2::SimPanel
     Name: SimPanel
-  - Class: fixed_wing_purt::HUDPanel
+  - Class: cubs2::HUDPanel
     Name: HUDPanel
 Visualization Manager:
   Class: ""

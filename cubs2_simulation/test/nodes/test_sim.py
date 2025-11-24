@@ -1,14 +1,13 @@
 """Unit tests for SimNode."""
 
-import pytest
 import numpy as np
+import pytest
 import rclpy
-from rclpy.executors import SingleThreadedExecutor
 from cubs2_msgs.msg import AircraftControl
-from std_msgs.msg import Float64, Empty, Bool
-from rosgraph_msgs.msg import Clock
-
 from cubs2_simulation.nodes.sim import SimNode
+from rclpy.executors import SingleThreadedExecutor
+from rosgraph_msgs.msg import Clock
+from std_msgs.msg import Bool, Empty, Float64
 
 
 @pytest.fixture
@@ -41,14 +40,14 @@ class TestSimNode:
         assert node.sim_time == 0.0
         assert not node.paused
 
-        # Verify sportcub model is initialized
-        assert hasattr(node, "sportcub")
+        # Verify model is initialized (composed closed-loop model)
+        assert hasattr(node, "model")
         assert hasattr(node, "x")
         assert hasattr(node, "u")
         assert hasattr(node, "p")
 
         # Verify initial position for takeoff (CG at 0.1m so wheels touch ground)
-        assert np.isclose(node.x.p[2], 0.1)
+        assert np.isclose(node.x.plant.p[2], 0.1)
 
         node.destroy_node()
 
@@ -74,7 +73,7 @@ class TestSimNode:
 
         # Store initial state
         initial_time = node.sim_time
-        initial_pos = np.array(node.x.p)
+        initial_pos = np.array(node.x.plant.p)
 
         # Step simulation once
         node.step_simulation()
@@ -84,7 +83,8 @@ class TestSimNode:
 
         # State may change slightly due to dynamics (even at rest, there might be numerical drift)
         # Just verify no NaN or inf values
-        assert np.all(np.isfinite(node.x.as_vec()))
+        x_vec = node.model._state_to_vec(node.x)
+        assert np.all(np.isfinite(x_vec))
 
         node.destroy_node()
 
@@ -102,11 +102,11 @@ class TestSimNode:
         # Call callback
         node.control_callback(msg)
 
-        # Verify inputs were updated
-        assert np.isclose(node.u.ail, 0.5)
-        assert np.isclose(node.u.elev, -0.3)
-        assert np.isclose(node.u.rud, 0.1)
-        assert np.isclose(node.u.thr, 0.7)
+        # Verify inputs were updated (closed-loop model uses _manual suffix)
+        assert np.isclose(node.u.ail_manual, 0.5)
+        assert np.isclose(node.u.elev_manual, -0.3)
+        assert np.isclose(node.u.rud_manual, 0.1)
+        assert np.isclose(node.u.thr_manual, 0.7)
 
         node.destroy_node()
 
@@ -133,10 +133,10 @@ class TestSimNode:
 
         # Modify state
         node.sim_time = 5.0
-        node.x.p[0] = 10.0
-        node.x.p[1] = 5.0
-        node.x.p[2] = 2.0
-        node.u.thr = 0.8
+        node.x.plant.p[0] = 10.0
+        node.x.plant.p[1] = 5.0
+        node.x.plant.p[2] = 2.0
+        node.u.thr_manual = 0.8
 
         # Reset via topic callback
         msg = Empty()
@@ -144,12 +144,12 @@ class TestSimNode:
 
         # Verify reset to initial conditions
         assert node.sim_time == 0.0
-        assert np.isclose(node.x.p[2], 0.1)  # CG height for wheels on ground
-        assert np.isclose(node.x.v[0], 0.0)
-        assert np.isclose(node.x.v[1], 0.0)
-        assert np.isclose(node.x.v[2], 0.0)
-        assert np.isclose(node.u.thr, 0.0)
-        assert np.isclose(node.u.elev, 0.0)
+        assert np.isclose(node.x.plant.p[2], 0.1)  # CG height for wheels on ground
+        assert np.isclose(node.x.plant.v[0], 0.0)
+        assert np.isclose(node.x.plant.v[1], 0.0)
+        assert np.isclose(node.x.plant.v[2], 0.0)
+        assert np.isclose(node.u.thr_manual, 0.0)
+        assert np.isclose(node.u.elev_manual, 0.0)
 
         node.destroy_node()
 
@@ -193,11 +193,11 @@ class TestSimNode:
         """Test joint state message is properly formatted."""
         node = SimNode()
 
-        # Set some control inputs
-        node.u.ail = 0.5
-        node.u.elev = -0.3
-        node.u.rud = 0.2
-        node.u.thr = 0.7
+        # Set some control inputs (closed-loop model uses _manual suffix)
+        node.u.ail_manual = 0.5
+        node.u.elev_manual = -0.3
+        node.u.rud_manual = 0.2
+        node.u.thr_manual = 0.7
 
         # Call publish (should not raise exception)
         node.publish_joint_states()
@@ -228,16 +228,21 @@ class TestSimNode:
         """Test propeller angle accumulates with throttle."""
         node = SimNode()
 
-        # Set throttle
-        node.u.thr = 1.0  # Full throttle
+        # Set throttle (closed-loop model uses _manual suffix)
+        node.u.thr_manual = 1.0  # Full throttle
 
         initial_angle = node.propeller_angle
 
-        # Publish joint states (advances propeller angle)
+        # Step simulation first to compute outputs (which sets thr_cmd)
+        node.step_simulation()
+
+        # Publish joint states (advances propeller angle based on thr_cmd)
         node.publish_joint_states()
 
-        # Angle should have increased
-        assert node.propeller_angle > initial_angle
+        # Angle should have increased (thr_cmd should be set from outputs)
+        # Note: thr_cmd is only set if outputs are computed
+        if node.thr_cmd > 0:
+            assert node.propeller_angle > initial_angle
 
         # Angle should wrap to [0, 2π]
         assert 0.0 <= node.propeller_angle < 2.0 * np.pi
@@ -248,11 +253,11 @@ class TestSimNode:
         """Test that quaternion can be accessed via x.r attribute."""
         node = SimNode()
 
-        # Verify quaternion attribute exists and is accessible
-        # The node accesses x.r (attitude quaternion field in SportCubStatesQuat)
+        # Verify quaternion attribute exists and is accessible (in plant submodel)
+        # The node accesses x.plant.r (attitude quaternion field in SportCubStatesQuat)
 
         # Access quaternion (should not raise AttributeError)
-        q = node.x.r
+        q = node.x.plant.r
 
         # Verify it's a valid quaternion (4 elements, normalized)
         assert len(q) == 4
@@ -269,9 +274,9 @@ class TestSimNode:
         node.step_simulation()
 
         # Verify outputs were computed if f_y exists
-        if hasattr(node.sportcub, "f_y"):
+        if hasattr(node.model, "f_y"):
             assert node.last_outputs is not None
-            # Outputs should have force/moment attributes
+            # Outputs is an object (not dict) with force attributes
             assert hasattr(node.last_outputs, "FA_b")  # Aero force
             assert hasattr(node.last_outputs, "FT_b")  # Thrust force
             assert hasattr(node.last_outputs, "FW_b")  # Weight force

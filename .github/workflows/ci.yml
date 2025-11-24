@@ -26,14 +26,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y black clang-format
 
-      - name: Check Python formatting (Black)
-        run: |
-          ls -la resources/dev/ || echo "Config directory not found"
-          black --config ./resources/dev/pyproject.toml --check --diff ./fixed_wing_purt/ ./test/
-
-      - name: Check C++ formatting (clang-format)
-        run: |
-          find ./src -name "*.cpp" -o -name "*.hpp" | xargs clang-format --dry-run -Werror -style=file:./resources/dev/.clang-format
+      - name: Run format check
+        run: make format-check
 
   test:
     name: ROS 2 Tests
@@ -44,7 +38,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          path: src/fixed_wing_purt
+          path: src/cubs2
 
       - name: Clone cyecca dependency
         run: |
@@ -79,7 +73,7 @@ jobs:
         run: |
           # Ensure all Ubuntu repositories are enabled
           apt-get update
-          apt-get install -y software-properties-common ccache
+          apt-get install -y software-properties-common ccache curl
           
           # Enable universe and multiverse repositories (needed for Python packages)
           add-apt-repository -y universe
@@ -112,6 +106,9 @@ jobs:
         run: |
           # Install all system dependencies via rosdep, skipping workspace dependencies
           rosdep install --from-paths src --ignore-src -r -y
+          
+          # Install pytest-cov for coverage reporting
+          apt-get install -y python3-pytest-cov
 
       - name: Cache CasADi
         id: cache-casadi
@@ -123,7 +120,7 @@ jobs:
       - name: Download CasADi
         if: steps.cache-casadi.outputs.cache-hit != 'true'
         run: |
-          wget -O /tmp/casadi.deb https://github.com/CogniPilot/helmet/raw/main/install/resources/casadi-3.6.3-328.0d8030d49-Linux.deb
+          curl -L -o /tmp/casadi.deb https://github.com/CogniPilot/helmet/raw/main/install/resources/casadi-3.6.3-328.0d8030d49-Linux.deb
 
       - name: Install CasADi
         run: |
@@ -135,36 +132,37 @@ jobs:
           path: |
             build
             install
-          key: colcon-${{ runner.os }}-${{ hashFiles('**/package.xml', '**/*.cmake', 'src/**/*.cpp', 'src/**/*.hpp', 'fixed_wing_purt/**/*.py') }}
+          key: colcon-${{ runner.os }}-${{ hashFiles('**/package.xml', '**/*.cmake', 'src/**/*.cpp', 'src/**/*.hpp', 'src/cubs2/**/*.py') }}
           restore-keys: |
             colcon-${{ runner.os }}-
 
       - name: Build
         run: |
           . /opt/ros/jazzy/setup.sh
-          colcon build --packages-up-to fixed_wing_purt --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cd src/cubs2
+          make build CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
         env:
           CCACHE_DIR: /root/.ccache
 
       - name: ccache statistics
         run: ccache -s
 
-      - name: Run tests with coverage
+      - name: Run Python tests with coverage
+        shell: bash
         run: |
-          . /opt/ros/jazzy/setup.sh
-          . install/setup.sh
-          cd src/fixed_wing_purt
+          . /opt/ros/jazzy/setup.bash
+          . install/setup.bash
           mkdir -p test_results
-          python3 -m pytest test/ \
-            --cov=fixed_wing_purt \
-            --cov-config=resources/config/.coveragerc \
+          python3 -m pytest src/cubs2/cubs2_dynamics/test/ \
+            --cov=src/cubs2/cubs2_dynamics/cubs2_dynamics \
+            --cov=src/cubs2/cubs2_control/cubs2_control \
+            --cov-config=src/cubs2/.devtools/pyproject.toml \
             --cov-report=term-missing \
             --cov-report=html:test_results/python_coverage \
             --cov-report=xml:test_results/coverage.xml
 
       - name: Check coverage thresholds
         run: |
-          cd src/fixed_wing_purt
           python3 -c "
           import xml.etree.ElementTree as ET
           import sys
@@ -175,8 +173,8 @@ jobs:
           coverage = float(root.attrib['line-rate']) * 100
           
           # Define thresholds
-          MIN_COVERAGE = 30.0  # Minimum overall coverage
-          TARGET_COVERAGE = 50.0  # Target coverage for warnings
+          MIN_COVERAGE = 60.0  # Minimum overall coverage
+          TARGET_COVERAGE = 80.0  # Target coverage for warnings
           
           print(f'Current coverage: {coverage:.1f}%')
           print(f'Minimum required: {MIN_COVERAGE}%')
@@ -195,7 +193,7 @@ jobs:
       - name: Generate coverage badge
         if: github.ref == 'refs/heads/main'
         run: |
-          cd src/fixed_wing_purt
+          cd src/cubs2
           python3 -c "
           import xml.etree.ElementTree as ET
           import json
@@ -204,7 +202,7 @@ jobs:
               tree = ET.parse('test_results/coverage.xml')
               root = tree.getroot()
               coverage = float(root.attrib['line-rate']) * 100
-              color = 'red' if coverage < 30 else 'orange' if coverage < 60 else 'green'
+              color = 'red' if coverage < 60 else 'orange' if coverage < 80 else 'green'
               
               # Create badge JSON for shields.io endpoint schema
               badge_data = {
@@ -238,7 +236,6 @@ jobs:
       - name: Coverage summary
         if: github.ref == 'refs/heads/main'
         run: |
-          cd src/fixed_wing_purt
           python3 -c "
           import xml.etree.ElementTree as ET
           
@@ -265,17 +262,17 @@ jobs:
                       continue
                   print(f'  - {pkg_name}: {pkg_coverage:.1f}%')
           
-          print(f'- **Status:** {'✅ PASS' if coverage >= 30 else '❌ FAIL'} (minimum 30%)')
-          " >> \$GITHUB_STEP_SUMMARY
+          print(f'- **Status:** {'✅ PASS' if coverage >= 60 else '❌ FAIL'} (minimum 60%)')
+          " >> $GITHUB_STEP_SUMMARY
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
         with:
           name: coverage-data
           path: |
-            src/fixed_wing_purt/test_results/coverage.xml
-            src/fixed_wing_purt/test_results/coverage-badge.json
-            src/fixed_wing_purt/test_results/python_coverage/
+            test_results/coverage.xml
+            test_results/coverage-badge.json
+            test_results/python_coverage/
           retention-days: 30
         continue-on-error: true
 
@@ -283,7 +280,8 @@ jobs:
         run: |
           . /opt/ros/jazzy/setup.sh
           . install/setup.sh
-          colcon test --packages-select fixed_wing_purt --event-handlers console_direct+
+          cd src/cubs2
+          make test-quick
 
       - name: Check test results
         run: |

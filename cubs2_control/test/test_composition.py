@@ -1,11 +1,11 @@
 """Tests for hierarchical model composition."""
 
-import pytest
-import numpy as np
 import casadi as ca
-from cubs2_dynamics.model import ModelSX, symbolic, state, input_var, param, output_var
-from cubs2_dynamics.sportcub import sportcub
+import numpy as np
+import pytest
 from cubs2_control.pid_controller import pid_controller
+from cubs2_dynamics.model import ModelSX, input_var, output_var, param, state, symbolic
+from cubs2_dynamics.sportcub import sportcub
 
 
 def test_add_submodel():
@@ -17,7 +17,7 @@ def test_add_submodel():
 
     @symbolic
     class ParentInputs:
-        cmd: ca.SX = input_var(0.0, "command")
+        cmd: ca.SX = input_var(desc="command")
 
     @symbolic
     class ParentParams:
@@ -48,10 +48,10 @@ def test_build_composed_simple():
 
     @symbolic
     class ParentInputs:
-        roll_cmd: ca.SX = input_var(0.0, "roll command")
-        pitch_cmd: ca.SX = input_var(0.0, "pitch command")
-        yaw_cmd: ca.SX = input_var(0.0, "yaw command")
-        speed_cmd: ca.SX = input_var(3.0, "speed command")
+        roll_cmd: ca.SX = input_var(1, 0.0, desc="roll command")
+        pitch_cmd: ca.SX = input_var(1, 0.0, desc="pitch command")
+        yaw_cmd: ca.SX = input_var(1, 0.0, desc="yaw command")
+        speed_cmd: ca.SX = input_var(1, 3.0, desc="speed command")
 
     @symbolic
     class ParentParams:
@@ -94,10 +94,10 @@ def test_simulate_composed():
 
     @symbolic
     class ParentInputs:
-        roll_cmd: ca.SX = input_var(0.0, "roll command")
-        pitch_cmd: ca.SX = input_var(0.0, "pitch command")
-        yaw_cmd: ca.SX = input_var(0.0, "yaw command")
-        speed_cmd: ca.SX = input_var(3.0, "speed command")
+        roll_cmd: ca.SX = input_var(1, 0.0, desc="roll command")
+        pitch_cmd: ca.SX = input_var(1, 0.0, desc="pitch command")
+        yaw_cmd: ca.SX = input_var(1, 0.0, desc="yaw command")
+        speed_cmd: ca.SX = input_var(1, 3.0, desc="speed command")
 
     @symbolic
     class ParentParams:

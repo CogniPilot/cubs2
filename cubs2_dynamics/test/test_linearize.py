@@ -1,14 +1,10 @@
 """Tests for generic linearization API."""
 
-import pytest
-import numpy as np
 import casadi as ca
-from cubs2_dynamics.model import ModelSX, symbolic, state, input_var, param
-from cubs2_dynamics.linearize import (
-    find_trim,
-    linearize_dynamics,
-    analyze_modes,
-)
+import numpy as np
+import pytest
+from cubs2_dynamics.linearize import analyze_modes, find_trim, linearize_dynamics
+from cubs2_dynamics.model import ModelSX, input_var, param, state, symbolic
 
 
 def simple_oscillator_classes():
@@ -21,7 +17,7 @@ def simple_oscillator_classes():
 
     @symbolic
     class Inputs:
-        F: ca.SX = input_var(default=0.0, desc="external force (N)")
+        F: ca.SX = input_var(desc="external force (N)")
 
     @symbolic
     class Params:
@@ -285,7 +281,14 @@ def test_find_trim_none_guess():
 
     # Pass None for guesses - should use model defaults
     x_trim, u_trim, stats = find_trim(
-        model, None, None, cost_fn, None, ipopt_print_level=0, print_progress=False, verbose=False
+        model,
+        None,
+        None,
+        cost_fn,
+        None,
+        ipopt_print_level=0,
+        print_progress=False,
+        verbose=False,
     )
 
     assert x_trim is not None

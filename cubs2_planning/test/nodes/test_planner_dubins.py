@@ -1,16 +1,17 @@
 """Unit tests for DubinsGatePlannerNode."""
 
-import pytest
 import numpy as np
+import pytest
 import rclpy
-from rclpy.executors import SingleThreadedExecutor
-
 from cubs2_planning.nodes.planner_dubins import DubinsGatePlannerNode
+from rclpy.executors import SingleThreadedExecutor
+from rclpy.parameter import Parameter
 
 
 @pytest.fixture
 def ros_context():
     """Initialize and cleanup ROS context for each test."""
+    # Initialize ROS without use_sim_time
     rclpy.init()
     yield
     rclpy.shutdown()
@@ -43,10 +44,13 @@ class TestDubinsGatePlannerNode:
             # Verify segments were planned
             assert hasattr(node, "segments")
 
-            node.destroy_node()
         except FileNotFoundError as e:
             # If racecourse YAML not found, skip this test
             pytest.skip(f"Racecourse YAML not found: {e}")
+        finally:
+            # Ensure node is destroyed even if test fails
+            if "node" in locals():
+                node.destroy_node()
 
     def test_parameters(self, ros_context):
         """Test that node parameters are accessible."""
@@ -65,9 +69,11 @@ class TestDubinsGatePlannerNode:
             assert altitude >= 0.0
             assert velocity > 0.0
 
-            node.destroy_node()
         except FileNotFoundError:
             pytest.skip("Racecourse YAML not found")
+        finally:
+            if "node" in locals():
+                node.destroy_node()
 
     def test_dubins_functions_exist(self, ros_context):
         """Test that Dubins planning functions were created."""
@@ -78,9 +84,11 @@ class TestDubinsGatePlannerNode:
             assert callable(node.plan_fn)
             assert callable(node.eval_fn)
 
-            node.destroy_node()
         except FileNotFoundError:
             pytest.skip("Racecourse YAML not found")
+        finally:
+            if "node" in locals():
+                node.destroy_node()
 
     def test_trajectory_planning(self, ros_context):
         """Test that trajectory segments are generated."""
@@ -95,9 +103,11 @@ class TestDubinsGatePlannerNode:
             if hasattr(node, "racecourse") and len(node.racecourse.gates) > 0:
                 assert len(node.segments) > 0
 
-            node.destroy_node()
         except FileNotFoundError:
             pytest.skip("Racecourse YAML not found")
+        finally:
+            if "node" in locals():
+                node.destroy_node()
 
     def test_gate_sequence_parameter(self, ros_context):
         """Test that gate sequence parameter is accessible."""
@@ -107,9 +117,11 @@ class TestDubinsGatePlannerNode:
             gate_sequence = node.get_parameter("gate_sequence").value
             assert isinstance(gate_sequence, list)
 
-            node.destroy_node()
         except FileNotFoundError:
             pytest.skip("Racecourse YAML not found")
+        finally:
+            if "node" in locals():
+                node.destroy_node()
 
     def test_reference_frame_parameter(self, ros_context):
         """Test that reference frame ID is set correctly."""
@@ -120,9 +132,11 @@ class TestDubinsGatePlannerNode:
             assert isinstance(ref_frame, str)
             assert len(ref_frame) > 0
 
-            node.destroy_node()
         except FileNotFoundError:
             pytest.skip("Racecourse YAML not found")
+        finally:
+            if "node" in locals():
+                node.destroy_node()
 
 
 if __name__ == "__main__":

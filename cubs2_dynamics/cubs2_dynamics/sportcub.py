@@ -1,19 +1,18 @@
 """SportCub 6-DOF aircraft dynamics with type-safe symbolic framework."""
 
+from typing import ClassVar, Literal, Union
+
 import casadi as ca
 import cyecca.lie as lie
-from cyecca.lie.group_so3 import SO3DcmLieGroupElement
 import numpy as np
 from beartype import beartype
-from typing import Literal, Union, ClassVar
-
-from cubs2_dynamics.model import ModelSX, symbolic, state, input_var, param, output_var
+from cubs2_dynamics.model import ModelSX, input_var, output_var, param, state, symbolic
 from cubs2_dynamics.trim_fixed_wing import (
-    find_trim_fixed_wing,
     classify_aircraft_modes,
+    find_trim_fixed_wing,
     print_mode_summary,
 )
-
+from cyecca.lie.group_so3 import SO3DcmLieGroupElement
 
 # ============================================================================
 # State, Input, Parameter, Output Definitions
@@ -53,10 +52,10 @@ SportCubStates = Union[SportCubStatesQuat, SportCubStatesEuler]
 
 @symbolic
 class SportCubInputs:
-    ail: ca.SX = input_var(0.0, "aileron (normalized -1 to 1)")
-    elev: ca.SX = input_var(0.0, "elevator (normalized -1 to 1)")
-    rud: ca.SX = input_var(0.0, "rudder (normalized -1 to 1)")
-    thr: ca.SX = input_var(0.0, "throttle (normalized 0 to 1)")
+    ail: ca.SX = input_var(desc="aileron (normalized -1 to 1)")
+    elev: ca.SX = input_var(desc="elevator (normalized -1 to 1)")
+    rud: ca.SX = input_var(desc="rudder (normalized -1 to 1)")
+    thr: ca.SX = input_var(desc="throttle (normalized 0 to 1)")
 
 
 @symbolic
@@ -81,7 +80,7 @@ class SportCubParams:
     wing_incidence: ca.SX = param(np.deg2rad(3.0), "wing incidence angle (rad)")
 
     # Pitch coefficients
-    Cm0: ca.SX = param(0.02, "pitch moment coeff")
+    Cm0: ca.SX = param(0.05, "pitch moment coeff")
     Cma: ca.SX = param(-0.5, "pitch moment slope (1/rad)")
     Cmq: ca.SX = param(-3.0, "pitch damping (1/rad)")
 
@@ -93,14 +92,14 @@ class SportCubParams:
     CD0_fp: ca.SX = param(0.30, "flat plate drag")
     CY_fp: ca.SX = param(0.50, "flat plate sideforce")
 
-    # Control effectiveness (reduced for less sensitivity)
-    Clda: ca.SX = param(0.015, "aileron roll (1/rad)")  # Reduced from 0.06
-    Cldr: ca.SX = param(0.008, "rudder roll (1/rad)")  # Reduced from 0.03
-    Cmde: ca.SX = param(0.15, "elevator pitch (1/rad)")  # Reduced from 0.60
-    Cndr: ca.SX = param(0.02, "rudder yaw (1/rad)")  # Reduced from 0.08
-    Cnda: ca.SX = param(0.004, "aileron yaw (1/rad)")  # Reduced from 0.015
-    CYda: ca.SX = param(0.003, "aileron sideforce (1/rad)")  # Reduced from 0.010
-    CYdr: ca.SX = param(-0.020, "rudder sideforce (1/rad)")  # Reduced from -0.080
+    # Control effectiveness
+    Clda: ca.SX = param(0.070, "aileron roll (1/rad)")
+    Cldr: ca.SX = param(0.018, "rudder roll (1/rad)")
+    Cmde: ca.SX = param(0.35, "elevator pitch (1/rad)")
+    Cndr: ca.SX = param(0.045, "rudder yaw (1/rad)")
+    Cnda: ca.SX = param(0.009, "aileron yaw (1/rad)")
+    CYda: ca.SX = param(0.006, "aileron sideforce (1/rad)")
+    CYdr: ca.SX = param(-0.045, "rudder sideforce (1/rad)")
 
     # Stability & damping
     Cnb: ca.SX = param(0.06, "yaw stiffness (1/rad)")
@@ -129,6 +128,7 @@ class SportCubParams:
     ground_c_xy: ca.SX = param(0.05, "lateral damping (N·s/m)")
     ground_mu: ca.SX = param(0.15, "friction coefficient")  # Reduced from 0.6 (4x reduction)
     ground_max_force_per_wheel: ca.SX = param(20.0, "max normal force per wheel (N)")
+    tailwheel_steer_gain: ca.SX = param(0.03, "tail wheel steering effectiveness (moment/rad)")
 
 
 @symbolic
@@ -384,6 +384,7 @@ def aerodynamic_forces_and_moments(
 def ground_forces_and_moments(
     x: Union[SportCubStatesQuat, SportCubStatesEuler],
     R_eb: SO3DcmLieGroupElement,
+    u: SportCubInputs,
     p: SportCubParams,
 ) -> dict:
     """Compute ground reaction forces and moments from wheel contact.
@@ -392,13 +393,15 @@ def ground_forces_and_moments(
     Wheel positions are hardcoded in body FLU frame:
     - Left wheel: (0.1, 0.1, -0.1) - front left
     - Right wheel: (0.1, -0.1, -0.1) - front right
-    - Tail wheel: (-0.4, 0.0, 0.0) - aft center
+    - Tail wheel: (-0.4, 0.0, 0.0) - aft center (steerable via rudder)
 
     Forces computed in earth frame, then transformed to body frame for moments.
+    Tail wheel steering: rudder input creates a yaw moment when tail wheel is on ground.
 
     Args:
         x: Aircraft state
         R_eb: Rotation from earth to body frame
+        u: Control inputs (for rudder-linked tail wheel steering)
         p: Aircraft parameters
 
     Returns:
@@ -420,7 +423,7 @@ def ground_forces_and_moments(
     ground_force_e_list = []
     MG_b = ca.SX.zeros(3)
 
-    for wheel_b in wheel_b_list:
+    for i, wheel_b in enumerate(wheel_b_list):
         wheel_e = R_eb @ wheel_b
         pos_wheel_e = x.p + wheel_e
         vel_wheel_b = v_b + ca.cross(x.w, wheel_b)
@@ -442,6 +445,38 @@ def ground_forces_and_moments(
 
         force_b = R_be @ force_e
         MG_b += ca.cross(wheel_b, force_b)
+
+        # Tail wheel steering moment (index 2 = tail wheel)
+        if i == 2:
+            # Bicycle steering model: steered wheel creates lateral force
+            # Lateral force creates yaw moment: M = F_lateral × arm_length
+            # F_lateral is proportional to slip angle, which depends on:
+            #   - Steering angle (rudder input)
+            #   - Forward velocity (higher speed = more lateral force)
+            # But at very low speeds, the force saturates (friction limited)
+
+            rud_rad = p.max_defl_rud * clamp(u.rud, -1, 1)
+            forward_speed = vel_wheel_e[0]  # Can be positive or negative
+
+            # Lateral force coefficient increases with speed but saturates
+            # At low speeds: friction-limited steering (proportional to normal force)
+            # At high speeds: aerodynamic-like steering (proportional to velocity)
+            speed_sq = forward_speed * forward_speed
+            # Smooth transition: F_lat ∝ sqrt(v²) * steer for high speed behavior
+            #                    but limited by friction at low speed
+            lateral_force_factor = ca.sqrt(speed_sq + 1.0) - 1.0  # Smooth, starts at 0
+
+            # Moment = lateral_force_factor * steer_angle * gain
+            # The gain should account for wheelbase (moment arm) and cornering stiffness
+            tailwheel_moment_z = p.tailwheel_steer_gain * rud_rad * lateral_force_factor
+
+            # Apply moment only when wheel is on ground
+            tailwheel_moment_b = ca.if_else(
+                pos_wheel_e[2] < 0.0,
+                ca.vertcat(0, 0, tailwheel_moment_z),
+                ca.vertcat(0, 0, 0),
+            )
+            MG_b += tailwheel_moment_b
 
     FG_b = R_be @ ca.sum2(ca.horzcat(*ground_force_e_list))
 
@@ -472,11 +507,17 @@ def sportcub(attitude_rep: AttitudeRep = "quat") -> ModelSX:
 
     if attitude_rep == "quat":
         model = ModelSX.create(
-            SportCubStatesQuat, SportCubInputs, SportCubParams, output_type=SportCubOutputs
+            SportCubStatesQuat,
+            SportCubInputs,
+            SportCubParams,
+            output_type=SportCubOutputs,
         )
     elif attitude_rep == "euler":
         model = ModelSX.create(
-            SportCubStatesEuler, SportCubInputs, SportCubParams, output_type=SportCubOutputs
+            SportCubStatesEuler,
+            SportCubInputs,
+            SportCubParams,
+            output_type=SportCubOutputs,
         )
     else:
         raise ValueError(f"Invalid attitude representation: {attitude_rep}")
@@ -510,7 +551,7 @@ def sportcub(attitude_rep: AttitudeRep = "quat") -> ModelSX:
 
     # Compute forces and moments (pure functions returning dicts)
     aero = aerodynamic_forces_and_moments(x, R_eb, u, p)
-    ground = ground_forces_and_moments(x, R_eb, p)
+    ground = ground_forces_and_moments(x, R_eb, u, p)
 
     # Extract forces and moments
     FA_b = aero["FA_b"]

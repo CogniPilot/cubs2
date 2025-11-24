@@ -4,16 +4,16 @@ import copy
 import numpy as np
 import rclpy
 from builtin_interfaces.msg import Time
+from cubs2_control.closed_loop import closed_loop_sportcub
+from cubs2_dynamics.sportcub import SportCubOutputs
+from cubs2_msgs.msg import AircraftControl
 from geometry_msgs.msg import Point, PoseStamped, TransformStamped, TwistStamped, Vector3Stamped
 from rclpy.node import Node
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool, ColorRGBA, Empty, Float64
+from std_msgs.msg import Bool, ColorRGBA, Empty, Float32, Float64
 from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
-
-from cubs2_dynamics.sportcub import sportcub, SportCubOutputs
-from cubs2_msgs.msg import AircraftControl
 
 
 class SimNode(Node):
@@ -58,27 +58,43 @@ class SimNode(Node):
         self.paused_publisher = self.create_publisher(Bool, "/sat/paused", 10)
         self.resume()
 
-        # Initialize sportcub model
-        self.sportcub = sportcub()
-        self.x = copy.deepcopy(self.sportcub.x0)  # deep copy initial state with defaults
-        self.u = copy.deepcopy(self.sportcub.u0)  # deep copy initial input with defaults
-        self.p = copy.deepcopy(self.sportcub.p0)  # deep copy initial parameters with defaults
+        # Initialize closed-loop model (composed aircraft + controller)
+        self.model = closed_loop_sportcub()
+
+        # State and inputs for composed model
+        # For composed models, x0 is structured (x0.plant, x0.controller)
+        # while x0_composed is the flat vector for integration
+        self.x = copy.deepcopy(self.model.x0)  # Structured state with submodel access
+        self.u = copy.deepcopy(self.model.u0)  # External inputs
+        self.p = copy.deepcopy(self.model.p0)  # Parameters (empty for this model)
+
+        # Manual control inputs from joystick/gamepad
+        self.u.ail_manual = 0.0
+        self.u.elev_manual = 0.0
+        self.u.rud_manual = 0.0
+        self.u.thr_manual = 0.0
+        self.u.mode = 0.0  # 0=manual, 1=stabilized
 
         # Ready-for-takeoff start (taildragger sitting on its main wheels, no initial bounce).
         # World frame ENU (z up), ground plane z=0. Main wheels located at z=-0.1 in body frame, so
         # choosing CG z = 0.1 puts both main wheels exactly on the ground with zero penetration.
         # Tail wheel in current model sits at z=0 (should be below CG physically); this means tail wheel is raised.
         # For a simple takeoff run this is acceptable; adjust dynamics wheel geometry later for visual accuracy.
-        self.x.p[2] = 0.1  # CG altitude so main wheels touch ground (no penetration)
-        self.x.v[0] = 0.0  # Start from rest; user can apply throttle
-        self.x.v[1] = 0.0
-        self.x.v[2] = 0.0
-        self.u.thr = 0.0  # Idle throttle initially
-        self.u.elev = 0.0  # Neutral elevator
+
+        # Set initial plant state using structured access
+        self.x.plant.p[2] = 0.1  # CG altitude so main wheels touch ground
+        self.x.plant.v[0] = 0.0  # Start from rest
+        self.x.plant.v[1] = 0.0
+        self.x.plant.v[2] = 0.0
 
         # Subscribe to control messages (published by virtual joystick, gamepad, keyboard)
         self.control_subscription = self.create_subscription(
             AircraftControl, "/control", self.control_callback, 10
+        )
+
+        # Subscribe to control mode (0=manual, 1=stabilized)
+        self.mode_subscription = self.create_subscription(
+            Float32, "/control_mode", self.mode_callback, 10
         )
 
         # Joint state publisher for control surface and propeller animation
@@ -90,6 +106,12 @@ class SimNode(Node):
         # Track last outputs for force visualization
         self.last_outputs = {}
 
+        # Track actual control commands sent to aircraft (for visualization)
+        self.ail_cmd = 0.0
+        self.elev_cmd = 0.0
+        self.rud_cmd = 0.0
+        self.thr_cmd = 0.0
+
     def get_sim_time_msg(self):
         sim_time_msg = Clock()
         sim_time_msg.clock = Time()
@@ -99,25 +121,30 @@ class SimNode(Node):
 
     def control_callback(self, msg: AircraftControl):
         """Handle AircraftControl messages."""
-        self.u.ail = float(msg.aileron)
-        self.u.elev = float(msg.elevator)
-        self.u.thr = float(msg.throttle)
-        self.u.rud = float(msg.rudder)
+        self.u.ail_manual = float(msg.aileron)
+        self.u.elev_manual = float(msg.elevator)
+        self.u.thr_manual = float(msg.throttle)
+        self.u.rud_manual = float(msg.rudder)
+
+    def mode_callback(self, msg: Float32):
+        """Handle control mode messages."""
+        self.u.mode = float(msg.data)
 
     def publish_joint_states(self):
         """Publish joint states for control surfaces and propeller animation."""
         joint_state = JointState()
         joint_state.header.stamp = self.get_clock().now().to_msg()
 
+        # Use tracked control commands (updated in step_simulation)
         # Control surface deflections (convert from normalized [-1, 1] to radians)
         # Positive aileron command -> left aileron down, right aileron up
-        aileron_deflection = float(self.u.ail) * 0.4  # Max ~23 degrees
-        elevator_deflection = float(self.u.elev) * 0.4  # Max ~23 degrees
-        rudder_deflection = float(self.u.rud) * 0.4  # Max ~23 degrees
+        aileron_deflection = self.ail_cmd * 0.4  # Max ~23 degrees
+        elevator_deflection = self.elev_cmd * 0.4  # Max ~23 degrees
+        rudder_deflection = self.rud_cmd * 0.4  # Max ~23 degrees
 
         # Propeller rotation based on throttle
         # Angular velocity proportional to throttle (rad/s)
-        propeller_rpm = float(self.u.thr) * 2000.0  # Max 2000 RPM at full throttle
+        propeller_rpm = self.thr_cmd * 2000.0  # Max 2000 RPM at full throttle
         propeller_omega = propeller_rpm * 2.0 * np.pi / 60.0  # Convert to rad/s
         self.propeller_angle += propeller_omega * self.dt
         self.propeller_angle = self.propeller_angle % (2.0 * np.pi)  # Wrap to [0, 2π]
@@ -334,12 +361,13 @@ class SimNode(Node):
 
         self.get_logger().debug(f"sim time: {self.sim_time:.2f}s")
 
-        # Step the SportCub model
-        x_vec = self.x.as_vec()
+        # Step the closed-loop model (aircraft + controller)
+        # Convert structured state to vector for integration
+        x_vec = self.model._state_to_vec(self.x)
         u_vec = self.u.as_vec()
         p_vec = self.p.as_vec()
 
-        x_next = self.sportcub.f_step(x=x_vec, u=u_vec, p=p_vec, dt=self.dt)
+        x_next = self.model.f_step(x=x_vec, u=u_vec, p=p_vec, dt=self.dt)
 
         # Extract state vector from result dictionary
         x_next_vec = x_next["x_next"]
@@ -356,20 +384,44 @@ class SimNode(Node):
             self.pause()
             return
 
-        self.x = self.sportcub.State.from_vec(x_next_vec)
+        # Convert vector back to structured state
+        self.x = self.model._vec_to_state(x_next_vec)
 
-        # Compute outputs (forces and moments)
-        if hasattr(self.sportcub, "f_y"):
+        # Compute outputs from composed model (includes both control commands and forces/moments)
+        if hasattr(self.model, "f_y"):
             try:
-                result = self.sportcub.f_y(x=x_vec, u=u_vec, p=p_vec)
+                result = self.model.f_y(x=x_vec, u=u_vec, p=p_vec)
                 output_vec = result["y"]
-                self.last_outputs = SportCubOutputs.from_vec(output_vec)
+
+                # Parse composed outputs using ClosedLoopOutputs
+                from cubs2_control.closed_loop import ClosedLoopOutputs
+
+                outputs = ClosedLoopOutputs.from_vec(output_vec)
+
+                # Extract control commands for joint state visualization
+                self.ail_cmd = float(outputs.ail)
+                self.elev_cmd = float(outputs.elev)
+                self.rud_cmd = float(outputs.rud)
+                self.thr_cmd = float(outputs.thr)
+
+                # Store forces/moments for visualization
+                # Composed output only has total F and M, not broken down by source
+                self.last_outputs = type(
+                    "obj",
+                    (object,),
+                    {
+                        "FA_b": outputs.F,
+                        "FT_b": np.zeros(3),
+                        "FW_b": np.zeros(3),
+                        "MA_b": outputs.M,
+                        "MT_b": np.zeros(3),
+                        "MW_b": np.zeros(3),
+                    },
+                )()
             except Exception as e:
                 import traceback
 
                 self.get_logger().warn(f"Failed to compute outputs: {e}\n{traceback.format_exc()}")
-        else:
-            self.get_logger().warn("sportcub has no f_y function")
 
         # Publish joint states every step
         self.publish_joint_states()
@@ -379,8 +431,8 @@ class SimNode(Node):
             self.publish_force_moment_markers(self.last_outputs)
 
         # Publish pose using tf (position + orientation)
-        pos = self.x.p  # position in world frame
-        q = self.x.r  # quaternion (world->body) stored as [w, x, y, z]
+        pos = self.x.plant.p  # position in world frame
+        q = self.x.plant.r  # quaternion (world->body) stored as [w, x, y, z]
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = "map"
@@ -416,7 +468,7 @@ class SimNode(Node):
         self.pose_publisher.publish(pose_msg)
 
         # Publish velocity for HUD panel
-        vel = self.x.v  # velocity in world frame
+        vel = self.x.plant.v  # velocity in world frame
         velocity_msg = TwistStamped()
         velocity_msg.header.stamp = self.get_clock().now().to_msg()
         velocity_msg.header.frame_id = "map"
@@ -424,7 +476,7 @@ class SimNode(Node):
         velocity_msg.twist.linear.y = float(vel[1])
         velocity_msg.twist.linear.z = float(vel[2])
         # Angular velocity (w) in body frame
-        w = self.x.w
+        w = self.x.plant.w
         velocity_msg.twist.angular.x = float(w[0])
         velocity_msg.twist.angular.y = float(w[1])
         velocity_msg.twist.angular.z = float(w[2])
@@ -451,8 +503,8 @@ class SimNode(Node):
         self.publish_joint_states()
 
         # Publish TF for current pose with orientation
-        pos = self.x.p
-        q = self.x.r
+        pos = self.x.plant.p
+        q = self.x.plant.r
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = "map"
@@ -526,18 +578,19 @@ class SimNode(Node):
         # Reset clock
         self.sim_time = 0.0
 
-        # Reset sportcub state to initial conditions
-        self.x = copy.deepcopy(self.sportcub.x0)
-        self.u = copy.deepcopy(self.sportcub.u0)
-        self.p = copy.deepcopy(self.sportcub.p0)
+        # Reset closed-loop model state to initial conditions
+        self.x = copy.deepcopy(self.model.x0)
+        self.u = copy.deepcopy(self.model.u0)
+        self.p = copy.deepcopy(self.model.p0)
 
-        # Reapply takeoff-ready initial conditions
-        self.x.p[2] = 0.1
-        self.x.v[0] = 0.0
-        self.x.v[1] = 0.0
-        self.x.v[2] = 0.0
-        self.u.thr = 0.0
-        self.u.elev = 0.0
+        # Reapply takeoff-ready initial conditions (aircraft state portion)
+        self.x.plant.p[2] = 0.1
+        self.x.plant.v[0] = 0.0
+        self.x.plant.v[1] = 0.0
+        self.x.plant.v[2] = 0.0
+
+        self.u.thr_manual = 0.0
+        self.u.elev_manual = 0.0
 
         # Publish visuals immediately so RViz reflects new initial state while paused
         self.publish_visuals()

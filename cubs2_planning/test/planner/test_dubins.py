@@ -3,8 +3,8 @@ Pytest unit tests for Dubins path planner
 Run with: pytest test_dubins_fixedwing.py -v
 """
 
-import pytest
 import numpy as np
+import pytest
 from cubs2_planning.planner.dubins import derive_dubins
 
 
@@ -67,7 +67,8 @@ class TestForwardMotion:
                 if dist > tolerance:
                     direction = np.arctan2(dy, dx)
                     heading_error = np.arctan2(
-                        np.sin(path_psi[j - 1] - direction), np.cos(path_psi[j - 1] - direction)
+                        np.sin(path_psi[j - 1] - direction),
+                        np.cos(path_psi[j - 1] - direction),
                     )
 
                     # Forward motion: heading aligned with direction of travel (within 90°)

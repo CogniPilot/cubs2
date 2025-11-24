@@ -1,17 +1,9 @@
 """Tests for the ModelSX and ModelMX API with @symbolic dataclass pattern."""
 
-import pytest
-import numpy as np
 import casadi as ca
-from cubs2_dynamics.model import (
-    ModelSX,
-    ModelMX,
-    symbolic,
-    state,
-    input_var,
-    param,
-    output_var,
-)
+import numpy as np
+import pytest
+from cubs2_dynamics.model import ModelMX, ModelSX, input_var, output_var, param, state, symbolic
 
 
 class TestModelCreate:
@@ -114,7 +106,7 @@ class TestModelCreate:
 
         @symbolic
         class Inputs:
-            u: ca.SX = input_var(0.5)
+            u: ca.SX = input_var(default=0.5)
 
         @symbolic
         class Params:
@@ -166,7 +158,7 @@ class TestSimulation:
 
         @symbolic
         class Inputs:
-            u: ca.SX = input_var(0.0)
+            u: ca.SX = input_var(1, 0.0)
 
         @symbolic
         class Params:
@@ -222,6 +214,177 @@ class TestHybridFeatures:
 
         assert hasattr(model, "x")
         assert hasattr(model, "x0")
+
+
+class TestModelComposition:
+    """Test hierarchical model composition features."""
+
+    def test_compose_basic(self):
+        """Test basic model composition with two simple subsystems."""
+
+        # Create first subsystem: integrator (dx/dt = u)
+        @symbolic
+        class IntegratorStates:
+            x: ca.SX = state(1, 0.0, "position")
+
+        @symbolic
+        class IntegratorInputs:
+            u: ca.SX = input_var(desc="velocity command")
+
+        @symbolic
+        class IntegratorParams:
+            pass
+
+        integrator = ModelSX.create(IntegratorStates, IntegratorInputs, IntegratorParams)
+        x_int = integrator.x
+        u_int = integrator.u
+        integrator.build(f_x=u_int.u)
+
+        # Create second subsystem: proportional controller (u = -k*x)
+        @symbolic
+        class ControllerStates:
+            pass
+
+        @symbolic
+        class ControllerInputs:
+            x_meas: ca.SX = input_var(desc="measured position")
+
+        @symbolic
+        class ControllerParams:
+            k: ca.SX = param(2.0, "proportional gain")
+
+        @symbolic
+        class ControllerOutputs:
+            u_cmd: ca.SX = output_var(desc="velocity command")
+
+        controller = ModelSX.create(
+            ControllerStates, ControllerInputs, ControllerParams, ControllerOutputs
+        )
+        u_ctrl = controller.u
+        p_ctrl = controller.p
+        controller.build(f_x=ca.SX.zeros(0), f_y=-p_ctrl.k * u_ctrl.x_meas)
+
+        # Compose the two subsystems
+        parent = ModelSX.compose({"integrator": integrator, "controller": controller})
+
+        # Verify submodels are accessible
+        assert hasattr(parent, "integrator")
+        assert hasattr(parent, "controller")
+
+        # Connect using string paths
+        parent.connect("integrator.u.u", "controller.y.u_cmd")
+        parent.connect("controller.u.x_meas", "integrator.x.x")
+
+        # Build composed model
+        parent.build_composed(integrator="rk4")
+
+        # Verify composed model has combined states
+        assert hasattr(parent, "x0_composed")
+        assert parent.x0_composed.shape[0] == 1  # Only integrator has state
+
+        # Verify can step the composed model
+        x0 = parent.x0_composed
+        x0[0] = 1.0  # Start with non-zero position
+
+        result = parent.f_step(x=x0, u=parent.u0.as_vec(), p=parent.p0.as_vec(), dt=0.1)
+
+        assert "x_next" in result
+        # With k=2 and x0=1, u_cmd = -2, so dx/dt = -2
+        # After dt=0.1, x ≈ 1 - 0.2 = 0.8
+        x_next = float(result["x_next"][0])
+        assert x_next < 1.0, "Position should decrease with negative feedback"
+        assert x_next > 0.5, f"Expected x ≈ 0.8, got {x_next}"
+
+    def test_compose_states_merge(self):
+        """Test that compose_states properly merges multiple state types."""
+        from cubs2_dynamics.model import compose_states
+
+        @symbolic
+        class States1:
+            x: ca.SX = state(1, 0.0, "state x")
+            y: ca.SX = state(1, 0.0, "state y")
+
+        @symbolic
+        class States2:
+            z: ca.SX = state(1, 0.0, "state z")
+
+        # Compose the states
+        Combined = compose_states(States1, States2)
+
+        # Verify combined type has all fields
+        combined_instance = Combined.numeric()
+        assert hasattr(combined_instance, "x")
+        assert hasattr(combined_instance, "y")
+        assert hasattr(combined_instance, "z")
+
+        # Verify defaults are preserved
+        assert combined_instance.x == 0.0
+        assert combined_instance.y == 0.0
+        assert combined_instance.z == 0.0
+
+        # Verify vector size
+        assert combined_instance.as_vec().shape[0] == 3
+
+    def test_add_submodel_creates_proxy(self):
+        """Test that add_submodel creates accessible proxy for connections."""
+
+        @symbolic
+        class States:
+            x: ca.SX = state(1, 0.0)
+
+        @symbolic
+        class Inputs:
+            u: ca.SX = input_var()
+
+        @symbolic
+        class Params:
+            pass
+
+        parent = ModelSX.create(States, Inputs, Params)
+        child = ModelSX.create(States, Inputs, Params)
+
+        # Add submodel
+        parent.add_submodel("child", child)
+
+        # Verify child proxy is accessible as attribute
+        assert hasattr(parent, "child")
+        assert isinstance(parent.child, parent.SubmodelProxy)
+
+    def test_connect_signals(self):
+        """Test signal connection API."""
+
+        @symbolic
+        class States:
+            x: ca.SX = state(1, 0.0)
+
+        @symbolic
+        class Inputs:
+            u: ca.SX = input_var()
+
+        @symbolic
+        class Params:
+            pass
+
+        @symbolic
+        class Outputs:
+            y: ca.SX = output_var(desc="output")
+
+        parent = ModelSX.create(States, Inputs, Params)
+        child1 = ModelSX.create(States, Inputs, Params, Outputs)
+        child2 = ModelSX.create(States, Inputs, Params)
+
+        # Build simple dynamics
+        child1.build(f_x=ca.SX.zeros(1), f_y=child1.x.x)
+
+        parent.add_submodel("child1", child1)
+        parent.add_submodel("child2", child2)
+
+        # Test connection API using string paths
+        parent.connect("child2.u.u", "child1.y.y")
+
+        # Verify connection was stored
+        assert "child2" in parent._input_connections
+        assert "child2.u.u" in parent._input_connections["child2"]
 
 
 if __name__ == "__main__":

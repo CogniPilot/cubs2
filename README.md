@@ -1,6 +1,9 @@
 # Cubs2 - Fixed-Wing Aircraft Simulation and Control
 
 [![CI](https://github.com/jgoppert/cubs2/actions/workflows/ci.yml/badge.svg)](https://github.com/jgoppert/cubs2/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-62%25-orange)](https://github.com/jgoppert/cubs2)
+
+![Figure-8 Racecourse](racecourse_description/images/figure8.png)
 
 A ROS2 Jazzy monorepo for simulating and controlling fixed-wing aircraft using the SportCub aircraft model. This workspace provides complete simulation, visualization, planning, and control capabilities for autonomous fixed-wing aircraft.
 
@@ -27,6 +30,8 @@ Aircraft dynamics modeling and analysis tools using CasADi.
 
 ### cubs2_control
 Control algorithms for aircraft (used in simulation and hardware).
+- Autolevel attitude stabilization controller
+- Closed-loop system composition (aircraft + controller)
 - PID controller implementation
 - Reusable across simulation and real hardware
 
@@ -125,35 +130,38 @@ This project follows ROS2 coding standards with automated formatting:
 
 **Python** (Black + isort + flake8):
 ```bash
-cd src/cubs2/.devtools
+cd src/cubs2
 make format-python
 ```
 
 **C++** (clang-format):
 ```bash
-cd src/cubs2/.devtools
+cd src/cubs2
 make format-cpp
 ```
 
 **All code**:
 ```bash
-cd src/cubs2/.devtools
+cd src/cubs2
 make format
 ```
 
 **Run linters**:
 ```bash
-cd src/cubs2/.devtools
+cd src/cubs2
 make lint
 ```
 
 Configuration files in `.devtools/`:
 - Python: `pyproject.toml`, `.flake8`
 - C++: `.clang-format`
-- Build/test: `Makefile`
+- Scripts: `format_python.sh`, `format_cpp.sh`
 
 ## Features
 
+- **Hierarchical Model Composition**: Compose aircraft dynamics and controllers into integrated systems
+- **Type-Safe Modeling**: Structured state/input/output access with dataclasses
+- **Single Integration Loop**: Numerically accurate unified integration of all subsystems
 - **Dubins Path Planning**: Optimal path generation through waypoint gates
 - **Physics-Based Simulation**: CasADi-based differentiable dynamics
 - **RViz Integration**: 3D visualization with custom panels

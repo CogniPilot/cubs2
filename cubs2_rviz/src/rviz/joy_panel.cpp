@@ -1,4 +1,5 @@
 #include "cubs2_rviz/joy_panel.hpp"
+#include <QComboBox>
 #include <QHBoxLayout>
 #include <QMouseEvent>
 #include <QPainter>
@@ -163,6 +164,19 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   layout->addLayout(header_layout);
   connect(enable_checkbox_, &QCheckBox::stateChanged, this, &JoyPanel::onEnabledChanged);
 
+  // Mode selector
+  auto* mode_layout = new QHBoxLayout;
+  mode_layout->addWidget(new QLabel("Mode:"));
+  mode_combo_ = new QComboBox();
+  mode_combo_->addItem("Manual");
+  mode_combo_->addItem("Stabilized");
+  mode_combo_->setCurrentIndex(0);
+  mode_layout->addWidget(mode_combo_);
+  mode_layout->addStretch();
+  layout->addLayout(mode_layout);
+  connect(mode_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          &JoyPanel::onModeChanged);
+
   // 2D Joystick for aileron/elevator
   joystick_ = new JoystickWidget(this);
   layout->addWidget(joystick_);
@@ -231,10 +245,12 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   // Create ROS2 node and publishers
   node_ = std::make_shared<rclcpp::Node>("joy_panel");
   joy_publisher_ = node_->create_publisher<cubs2_msgs::msg::AircraftControl>("/control", 10);
+  mode_publisher_ = node_->create_publisher<std_msgs::msg::Float32>("/control_mode", 10);
 
   // Create subscribers to monitor external control (e.g., from gamepad)
   joy_subscriber_ = node_->create_subscription<cubs2_msgs::msg::AircraftControl>(
-      "/control", 10, [this](const cubs2_msgs::msg::AircraftControl::SharedPtr msg) { controlCallback(msg); });
+      "/control", 10,
+      [this](const cubs2_msgs::msg::AircraftControl::SharedPtr msg) { controlCallback(msg); });
 
   // Create timer for publishing control inputs at 20 Hz
   control_timer_ = new QTimer(this);
@@ -242,8 +258,11 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   connect(control_timer_, &QTimer::timeout, this, &JoyPanel::publishControlInputs);
   control_timer_->start();
 
-  // Spin ROS2 node in background thread
-  std::thread([n = node_]() { rclcpp::spin(n); }).detach();
+  // Create timer for spinning ROS2 node (process callbacks in Qt thread)
+  ros_spin_timer_ = new QTimer(this);
+  ros_spin_timer_->setInterval(10);  // 100 Hz for responsive callbacks
+  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() { rclcpp::spin_some(node_); });
+  ros_spin_timer_->start();
 }
 
 JoyPanel::~JoyPanel() = default;
@@ -290,6 +309,11 @@ void JoyPanel::publishControlInputs() {
   control_msg.throttle = static_cast<float>(throttle_);
   control_msg.rudder = static_cast<float>(rudder_);
   joy_publisher_->publish(control_msg);
+
+  // Publish mode
+  std_msgs::msg::Float32 mode_msg;
+  mode_msg.data = static_cast<float>(mode_);
+  mode_publisher_->publish(mode_msg);
 }
 
 void JoyPanel::onResetClicked() {
@@ -315,17 +339,17 @@ void JoyPanel::onEnabledChanged(int state) {
   aileron_trim_slider_->setEnabled(enabled_);
   elevator_trim_slider_->setEnabled(enabled_);
   reset_button_->setEnabled(enabled_);
+  mode_combo_->setEnabled(enabled_);
+}
+
+void JoyPanel::onModeChanged(int index) {
+  mode_ = index;  // 0 = manual, 1 = stabilized
 }
 
 void JoyPanel::controlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg) {
   // Only update display if disabled (showing external control)
   if (!enabled_) {
-    updateDisplayFromExternal(
-      msg->aileron,
-      msg->elevator,
-      msg->throttle,
-      msg->rudder
-    );
+    updateDisplayFromExternal(msg->aileron, msg->elevator, msg->throttle, msg->rudder);
   }
 }
 
@@ -340,16 +364,16 @@ void JoyPanel::updateDisplayFromExternal(double aileron, double elevator, double
   // Block signals to prevent feedback loop
   throttle_slider_->blockSignals(true);
   rudder_slider_->blockSignals(true);
-  
+
   // Update UI elements to show external control values
   throttle_slider_->setValue(static_cast<int>(throttle * 100));
   rudder_slider_->setValue(static_cast<int>(rudder * 100));
   throttle_label_->setText(QString::number(throttle, 'f', 2));
   rudder_label_->setText(QString::number(rudder, 'f', 2));
-  
+
   // Update joystick widget position to show external control
   joystick_->setPosition(aileron - aileron_trim_, elevator - elevator_trim_);
-  
+
   throttle_slider_->blockSignals(false);
   rudder_slider_->blockSignals(false);
 }

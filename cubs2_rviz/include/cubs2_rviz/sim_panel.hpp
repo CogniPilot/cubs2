@@ -40,6 +40,7 @@ private:
   QComboBox* speed_combo_;
   QComboBox* dt_combo_;
   QTimer* camera_timer_{nullptr};
+  QTimer* ros_spin_timer_{nullptr};
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr reset_publisher_;

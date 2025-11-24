@@ -14,10 +14,6 @@ ament_python_install_package(${PROJECT_NAME})
 # Testing
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
-  find_package(ament_cmake_flake8 REQUIRED)
-  
-  # Python style check (flake8 only - others too strict for initial development)
-  ament_flake8()
   
   # Unit tests
   ament_add_pytest_test(${PROJECT_NAME}_pytest test

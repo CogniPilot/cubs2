@@ -6,6 +6,16 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+
+# Install Python modules
+ament_python_install_package(${PROJECT_NAME})
+
+# Install Python executables
+install(PROGRAMS
+  ${PROJECT_NAME}/pose_to_tf.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 # Install URDF and mesh files
 install(DIRECTORY

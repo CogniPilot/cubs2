@@ -14,8 +14,6 @@ ament_python_install_package(${PROJECT_NAME})
 # Install Python executables
 install(PROGRAMS
   ${PROJECT_NAME}/nodes/sim.py
-  ${PROJECT_NAME}/nodes/pose_to_tf.py
-  ${PROJECT_NAME}/nodes/gamepad_control.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

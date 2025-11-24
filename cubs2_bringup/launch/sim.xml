@@ -13,10 +13,17 @@
     <arg name="show_forces" default="true"/>
 
     <!-- Replay: recorded flight from rosbag (ghost plane for comparison) -->
-    <executable cmd="ros2 bag play $(var bag_path) --rate $(var rate) --loop" output="screen" if="$(var enable_replay)"/>
+    <executable
+        cmd="ros2 bag play $(var bag_path)
+            --topics /cub1/pose
+            --exclude-topics /tf /tf_static /clock"
+        output="screen"
+        if="$(var enable_replay)"
+    />
+
 
     <!-- Replay: pose to TF broadcaster -->
-    <node pkg="cubs2_simulation" exec="pose_to_tf.py" name="replay_pose_to_tf" output="screen" if="$(var enable_replay)">
+    <node pkg="cubs2_description" exec="pose_to_tf.py" name="replay_pose_to_tf" output="screen" if="$(var enable_replay)">
         <param name="use_sim_time" value="false"/>
         <remap from="pose" to="/cub1/pose"/>
         <param name="frame_id" value="map"/>

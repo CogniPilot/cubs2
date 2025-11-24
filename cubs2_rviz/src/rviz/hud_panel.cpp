@@ -72,13 +72,12 @@ void HUDWidget::drawHorizon(QPainter& painter, int cx, int cy, int size) {
   // Make rectangles extra large to avoid gaps when rotated
   int extra = radius * 2;  // Extra size to cover rotation
 
-  // Draw sky (blue) - extends far upward
+  // Draw sky (blue) - fill entire background
   painter.setBrush(QColor(135, 206, 235, 200));
   painter.setPen(Qt::NoPen);
-  painter.drawRect(-radius - extra, -radius - extra - pitch_offset, 2 * (radius + extra),
-                   radius + extra + pitch_offset);
+  painter.drawRect(-radius - extra, -radius - extra, 2 * (radius + extra), 2 * (radius + extra));
 
-  // Draw ground (brown) - extends far downward
+  // Draw ground (brown) - layered on top, extends from horizon downward
   painter.setBrush(QColor(139, 90, 43, 200));
   painter.drawRect(-radius - extra, -pitch_offset, 2 * (radius + extra),
                    radius + extra + pitch_offset);
@@ -217,8 +216,11 @@ HUDPanel::HUDPanel(QWidget* parent) : rviz_common::Panel(parent) {
       "/sportcub/velocity", 10,
       std::bind(&HUDPanel::onVelocityReceived, this, std::placeholders::_1));
 
-  // Spin ROS2 node in background thread
-  std::thread([n = node_]() { rclcpp::spin(n); }).detach();
+  // Create timer for spinning ROS2 node (process callbacks in Qt thread)
+  ros_spin_timer_ = new QTimer(this);
+  ros_spin_timer_->setInterval(10);  // 100 Hz for responsive callbacks
+  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() { rclcpp::spin_some(node_); });
+  ros_spin_timer_->start();
 }
 
 HUDPanel::~HUDPanel() = default;

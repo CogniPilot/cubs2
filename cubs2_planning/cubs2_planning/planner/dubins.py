@@ -19,7 +19,6 @@ Functions:
 import casadi as ca
 import numpy as np
 
-
 # ==============================================================================
 # Core Utilities
 # ==============================================================================
@@ -492,7 +491,19 @@ def derive_dubins():
         "dubins_eval",
         [s, p0_e, psi0_e, angle1, dist, angle2, tp0, tp1, c0, c1, R_e],
         [x_out, y_out, psi_out],
-        ["s", "p0", "psi0", "angle1", "distance", "angle2", "tp0", "tp1", "c0", "c1", "R"],
+        [
+            "s",
+            "p0",
+            "psi0",
+            "angle1",
+            "distance",
+            "angle2",
+            "tp0",
+            "tp1",
+            "c0",
+            "c1",
+            "R",
+        ],
         ["x", "y", "psi"],
     )
 

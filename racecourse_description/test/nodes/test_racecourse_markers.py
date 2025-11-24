@@ -1,12 +1,12 @@
 """Unit tests for RacecourseNode."""
 
-import pytest
 import os
 import tempfile
-import rclpy
-from rclpy.executors import SingleThreadedExecutor
 
+import pytest
+import rclpy
 from racecourse_description.nodes.racecourse_markers import RacecourseNode
+from rclpy.executors import SingleThreadedExecutor
 
 
 @pytest.fixture
@@ -60,9 +60,10 @@ class TestRacecourseNode:
     def test_node_initialization_with_valid_yaml(self, ros_context):
         """Test that RacecourseNode initializes correctly with valid YAML."""
         # Use the actual racecourse.yaml from resources/config
-        import pathlib
         import os
-        from racecourse_description import RacecourseLoader, MarkerFactory
+        import pathlib
+
+        from racecourse_description import MarkerFactory, RacecourseLoader
 
         # Get the package root directory (test is in test/nodes/)
         test_dir = pathlib.Path(__file__).parent
@@ -80,8 +81,10 @@ class TestRacecourseNode:
 
             # Create a temporary symlink to the actual file
             symlink_path = package_root / "racecourse.yaml"
-            if not symlink_path.exists():
-                symlink_path.symlink_to(yaml_path)
+            # Remove existing file/symlink if present
+            if symlink_path.exists() or symlink_path.is_symlink():
+                symlink_path.unlink()
+            symlink_path.symlink_to(yaml_path)
 
             try:
                 # Now create the node - it should find racecourse.yaml
@@ -94,8 +97,8 @@ class TestRacecourseNode:
 
                 node.destroy_node()
             finally:
-                # Clean up symlink if we created it
-                if symlink_path.is_symlink():
+                # Clean up symlink
+                if symlink_path.exists() or symlink_path.is_symlink():
                     symlink_path.unlink()
         finally:
             os.chdir(original_cwd)
@@ -130,7 +133,7 @@ class TestRacecourseNode:
 
     def test_marker_factory_initialization(self, ros_context, temp_racecourse_yaml):
         """Test that MarkerFactory is initialized correctly."""
-        from racecourse_description import RacecourseLoader, MarkerFactory
+        from racecourse_description import MarkerFactory, RacecourseLoader
 
         loader = RacecourseLoader(temp_racecourse_yaml)
         factory = MarkerFactory(loader.frame_id)
@@ -144,7 +147,7 @@ class TestRacecourseNode:
         # we'll create a modified test that doesn't instantiate the node
         # but verifies the publish logic would work
 
-        from racecourse_description import RacecourseLoader, MarkerFactory
+        from racecourse_description import MarkerFactory, RacecourseLoader
         from visualization_msgs.msg import MarkerArray
 
         loader = RacecourseLoader(temp_racecourse_yaml)

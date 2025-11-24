@@ -13,21 +13,21 @@
   </node>
   
   <!-- Launch gamepad control node -->
-  <node pkg="cubs2_simulation" exec="gamepad_control.py" name="gamepad_control" output="screen">
+  <node pkg="cubs2_control" exec="gamepad_control.py" name="gamepad_control" output="screen">
     <!-- Axis mapping (can be customized for different gamepad layouts) -->
     <param name="axis_throttle" value="1"/>    <!-- Left stick Y -->
     <param name="axis_rudder" value="0"/>      <!-- Left stick X -->
-    <param name="axis_elevator" value="3"/>    <!-- Right stick Y -->
-    <param name="axis_aileron" value="2"/>     <!-- Right stick X -->
+    <param name="axis_elevator" value="4"/>    <!-- Right stick Y -->
+    <param name="axis_aileron" value="3"/>     <!-- Right stick X -->
     
     <!-- Control parameters -->
-    <param name="throttle_default" value="0.5"/>
+    <param name="throttle_default" value="0.0"/>
     <param name="deadzone" value="0.05"/>
     
     <!-- Axis inversions (set to true if axis goes wrong direction) -->
-    <param name="invert_throttle" value="false"/>
-    <param name="invert_elevator" value="false"/>
-    <param name="invert_aileron" value="false"/>
+    <param name="invert_aileron" value="true"/>
+    <param name="invert_elevator" value="true"/>
     <param name="invert_rudder" value="false"/>
+    <param name="invert_throttle" value="false"/>
   </node>
 </launch>

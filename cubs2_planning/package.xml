@@ -21,13 +21,13 @@
   <depend>cubs2_msgs</depend>
   <depend>cubs2_description</depend>
   <depend>racecourse_description</depend>
+  <depend>tf_transformations</depend>
 
   <exec_depend>python3-numpy</exec_depend>
 
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>python3-pytest</test_depend>
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_common</test_depend>
+
 
   <export>
     <build_type>ament_cmake</build_type>

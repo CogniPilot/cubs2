@@ -1,5 +1,5 @@
-#ifndef FIXED_WING_PURT_HUD_PANEL_HPP
-#define FIXED_WING_PURT_HUD_PANEL_HPP
+#ifndef CUBS2_RVIZ_HUD_PANEL_HPP
+#define CUBS2_RVIZ_HUD_PANEL_HPP
 
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
@@ -57,6 +57,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_subscription_;
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr velocity_subscription_;
+  QTimer* ros_spin_timer_{nullptr};
 
   HUDWidget* hud_widget_{nullptr};
 
@@ -69,4 +70,4 @@ private:
 
 }  // namespace cubs2
 
-#endif  // FIXED_WING_PURT_HUD_PANEL_HPP
+#endif  // CUBS2_RVIZ_HUD_PANEL_HPP

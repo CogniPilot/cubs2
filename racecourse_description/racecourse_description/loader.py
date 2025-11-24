@@ -1,11 +1,13 @@
 # fixed_wing_purt/racecourse/loader.py
 
-import yaml
 import math
-from typing import List
-from .elements import GenericModel, Gate
-from ament_index_python.packages import get_package_share_directory
 import os
+from typing import List
+
+import yaml
+from ament_index_python.packages import get_package_share_directory
+
+from .elements import Gate, GenericModel
 
 
 def resolve_package_path(path: str) -> str:

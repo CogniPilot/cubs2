@@ -3,7 +3,6 @@
 import casadi as ca
 import numpy as np
 from beartype import beartype
-
 from cubs2_dynamics.model import ModelSX
 
 
@@ -37,11 +36,10 @@ def find_trim_fixed_wing(
         the solver finds the natural equilibrium which corresponds to maximum L/D ratio.
         This is the best glide condition - no explicit L/D optimization is needed.
     """
-    from cubs2_dynamics.linearize import (
-        find_trim as find_trim_generic,
-        print_trim_details,
-    )
     import copy
+
+    from cubs2_dynamics.linearize import find_trim as find_trim_generic
+    from cubs2_dynamics.linearize import print_trim_details
 
     # Use defaults if not specified
     if gamma is not None:
@@ -64,7 +62,11 @@ def find_trim_fixed_wing(
 
     # Velocity in earth frame: mostly east with slight upward component
     s_guess.v = np.array(
-        [V_target_guess * np.cos(pitch_guess), 0.0, V_target_guess * np.sin(pitch_guess)]
+        [
+            V_target_guess * np.cos(pitch_guess),
+            0.0,
+            V_target_guess * np.sin(pitch_guess),
+        ]
     )
     s_guess.w = np.array([0.0, 0.0, 0.0])
 

@@ -1,20 +1,16 @@
 """Tests for the sportcub model factory."""
 
-import pytest
-import numpy as np
 import copy
+
 import casadi as ca
-from cyecca import lie
+import numpy as np
+import pytest
+from cubs2_dynamics.linearize import analyze_modes, linearize_dynamics
 from cubs2_dynamics.sportcub import sportcub
-from cubs2_dynamics.linearize import (
-    linearize_dynamics,
-    analyze_modes,
-)
-from cubs2_dynamics.trim_fixed_wing import (
-    find_trim_fixed_wing as find_trim,
-    classify_aircraft_modes,
-    print_mode_summary,
-)
+from cubs2_dynamics.trim_fixed_wing import classify_aircraft_modes
+from cubs2_dynamics.trim_fixed_wing import find_trim_fixed_wing as find_trim
+from cubs2_dynamics.trim_fixed_wing import print_mode_summary
+from cyecca import lie
 
 
 class TestSportCubNode:
@@ -87,7 +83,6 @@ class TestSportCubNode:
         assert np.all(np.isfinite(x_final.v))
         q_norm = np.linalg.norm(x_final.r)  # quaternion in x.r
         np.testing.assert_allclose(q_norm, 1.0, rtol=1e-3)
-
 
     def test_ground_bounce_characterization(self):
         """Characterize ground bounce over several drop heights with aero disabled."""
@@ -569,7 +564,8 @@ class TestSportCubNode:
             dynamic_state_names = [
                 n
                 for n, _ in sorted(
-                    getattr(model_euler, "state_index", {}).items(), key=lambda kv: kv[1]
+                    getattr(model_euler, "state_index", {}).items(),
+                    key=lambda kv: kv[1],
                 )
             ]
 

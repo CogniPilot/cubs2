@@ -12,7 +12,7 @@
       <visual>
         <origin xyz="0 0 -0.1" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://fixed_wing_purt/resources/meshes/plane.glb"
+          <mesh filename="package://cubs2_description/meshes/plane.glb"
                 scale="1.0 1.0 1.0"/>
         </geometry>
       </visual>

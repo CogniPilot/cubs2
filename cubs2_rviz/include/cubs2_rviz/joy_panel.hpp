@@ -1,15 +1,17 @@
 #pragma once
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QSlider>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <cubs2_msgs/msg/aircraft_control.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/panel.hpp>
-#include <cubs2_msgs/msg/aircraft_control.hpp>
+#include <std_msgs/msg/float32.hpp>
 
 namespace cubs2 {
 
@@ -82,6 +84,7 @@ private Q_SLOTS:
   void publishControlInputs();
   void onResetClicked();
   void onEnabledChanged(int state);
+  void onModeChanged(int index);
 
 private:
   void controlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg);
@@ -99,8 +102,10 @@ private:
   QLabel* aileron_trim_label_{nullptr};
   QLabel* elevator_trim_label_{nullptr};
   QTimer* control_timer_{nullptr};
+  QTimer* ros_spin_timer_{nullptr};
   QPushButton* reset_button_{nullptr};
   QCheckBox* enable_checkbox_{nullptr};
+  QComboBox* mode_combo_{nullptr};
 
   double aileron_{0.0};
   double elevator_{0.0};
@@ -109,10 +114,12 @@ private:
   double aileron_trim_{0.0};
   double elevator_trim_{0.0};
   bool enabled_{true};
+  int mode_{0};  // 0 = manual, 1 = stabilized
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<cubs2_msgs::msg::AircraftControl>::SharedPtr joy_publisher_{nullptr};
   rclcpp::Subscription<cubs2_msgs::msg::AircraftControl>::SharedPtr joy_subscriber_{nullptr};
+  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr mode_publisher_{nullptr};
 };
 
 }  // namespace cubs2

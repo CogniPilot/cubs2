@@ -23,7 +23,7 @@ Example:
 
     @symbolic
     class Inputs:
-        thrust: ca.SX = input_var(0.0, "thrust (N)")
+        thrust: ca.SX = input_var(desc="thrust (N)")
 
     @symbolic
     class Params:
@@ -40,10 +40,12 @@ Example:
     model.build(f_x=f_x, integrator='rk4')
 """
 
+import copy
 from dataclasses import dataclass, field, fields
-from typing import TypeVar, Generic, Union, Any, Callable
-import numpy as np
+from typing import Any, Callable, Generic, TypeVar, Union
+
 import casadi as ca
+import numpy as np
 from beartype import beartype
 
 __all__ = [
@@ -88,7 +90,8 @@ def state(dim: int = 1, default: Union[float, list, None] = None, desc: str = ""
     elif isinstance(default, (int, float)) and dim > 1:
         default = [float(default)] * dim
     return field(
-        default=None, metadata={"dim": dim, "default": default, "desc": desc, "type": "state"}
+        default=None,
+        metadata={"dim": dim, "default": default, "desc": desc, "type": "state"},
     )
 
 
@@ -108,7 +111,8 @@ def algebraic_var(dim: int = 1, default: Union[float, list, None] = None, desc: 
     elif isinstance(default, (int, float)) and dim > 1:
         default = [float(default)] * dim
     return field(
-        default=None, metadata={"dim": dim, "default": default, "desc": desc, "type": "algebraic"}
+        default=None,
+        metadata={"dim": dim, "default": default, "desc": desc, "type": "algebraic"},
     )
 
 
@@ -127,7 +131,8 @@ def dependent_var(dim: int = 1, default: Union[float, list, None] = None, desc: 
     elif isinstance(default, (int, float)) and dim > 1:
         default = [float(default)] * dim
     return field(
-        default=None, metadata={"dim": dim, "default": default, "desc": desc, "type": "dependent"}
+        default=None,
+        metadata={"dim": dim, "default": default, "desc": desc, "type": "dependent"},
     )
 
 
@@ -147,7 +152,8 @@ def quadrature_var(dim: int = 1, default: Union[float, list, None] = None, desc:
     elif isinstance(default, (int, float)) and dim > 1:
         default = [float(default)] * dim
     return field(
-        default=None, metadata={"dim": dim, "default": default, "desc": desc, "type": "quadrature"}
+        default=None,
+        metadata={"dim": dim, "default": default, "desc": desc, "type": "quadrature"},
     )
 
 
@@ -167,7 +173,12 @@ def discrete_state(dim: int = 1, default: Union[float, list, None] = None, desc:
         default = [float(default)] * dim
     return field(
         default=None,
-        metadata={"dim": dim, "default": default, "desc": desc, "type": "discrete_state"},
+        metadata={
+            "dim": dim,
+            "default": default,
+            "desc": desc,
+            "type": "discrete_state",
+        },
     )
 
 
@@ -182,7 +193,12 @@ def discrete_var(default: int = 0, desc: str = ""):
     """
     return field(
         default=None,
-        metadata={"dim": 1, "default": float(default), "desc": desc, "type": "discrete_var"},
+        metadata={
+            "dim": 1,
+            "default": float(default),
+            "desc": desc,
+            "type": "discrete_var",
+        },
     )
 
 
@@ -196,7 +212,8 @@ def event_indicator(dim: int = 1, desc: str = ""):
         desc: Description
     """
     return field(
-        default=None, metadata={"dim": dim, "default": 0.0, "desc": desc, "type": "event_indicator"}
+        default=None,
+        metadata={"dim": dim, "default": 0.0, "desc": desc, "type": "event_indicator"},
     )
 
 
@@ -213,23 +230,33 @@ def param(default: float, desc: str = ""):
     """
     return field(
         default=None,
-        metadata={"dim": 1, "default": float(default), "desc": desc, "type": "parameter"},
+        metadata={
+            "dim": 1,
+            "default": float(default),
+            "desc": desc,
+            "type": "parameter",
+        },
     )
 
 
-def input_var(default: float = 0.0, desc: str = ""):
+def input_var(dim: int = 1, default: Union[float, list, None] = None, desc: str = ""):
     """Create an input variable field (control signal).
 
     Args:
-        default: Default numeric value
+        dim: Dimension of the input (default: 1 for scalar)
+        default: Default numeric value (scalar or list matching dim)
         desc: Description string
 
     Example:
-        thrust: ca.SX = input_var(0.0, "thrust command (N)")
+        thrust: ca.SX = input_var(1, 0.0, "thrust command (N)")
+        quaternion: ca.SX = input_var(4, desc="orientation [w,x,y,z]")
         steering: ca.SX = input_var(desc="steering angle (rad)")
     """
+    if default is None:
+        default = 0.0 if dim == 1 else [0.0] * dim
     return field(
-        default=None, metadata={"dim": 1, "default": float(default), "desc": desc, "type": "input"}
+        default=None,
+        metadata={"dim": dim, "default": default, "desc": desc, "type": "input"},
     )
 
 
@@ -250,13 +277,66 @@ def output_var(dim: int = 1, default: Union[float, list, None] = None, desc: str
     elif isinstance(default, (int, float)) and dim > 1:
         default = [float(default)] * dim
     return field(
-        default=None, metadata={"dim": dim, "default": default, "desc": desc, "type": "output"}
+        default=None,
+        metadata={"dim": dim, "default": default, "desc": desc, "type": "output"},
     )
 
 
 # ============================================================================
 # Symbolic Dataclass Decorator
 # ============================================================================
+
+
+def compose_states(*state_types):
+    """Compose multiple state types into a single combined state type.
+
+    This programmatically creates a new state class that includes all fields
+    from the input state types, preserving type safety and field metadata.
+
+    Args:
+        *state_types: State type classes to combine
+
+    Returns:
+        New combined state class with all fields from input types
+
+    Example:
+        >>> ClosedLoopStates = compose_states(PlantStates, ControllerStates)
+    """
+    from dataclasses import MISSING, dataclass
+    from dataclasses import fields as get_fields
+
+    # Collect all fields from input types, preserving metadata
+    combined_annotations = {}
+    combined_fields = {}
+
+    for state_type in state_types:
+        # Ensure the type is a dataclass
+        if not hasattr(state_type, "__dataclass_fields__"):
+            continue
+
+        # Get fields from the dataclass
+        for fld in get_fields(state_type):
+            if fld.name.startswith("_"):
+                continue  # Skip private fields
+            combined_annotations[fld.name] = fld.type
+            # Create a new field with the same metadata
+            if fld.default is not MISSING:
+                combined_fields[fld.name] = field(default=fld.default, metadata=fld.metadata)
+            elif fld.default_factory is not MISSING:
+                combined_fields[fld.name] = field(
+                    default_factory=fld.default_factory, metadata=fld.metadata
+                )
+            else:
+                combined_fields[fld.name] = field(default=None, metadata=fld.metadata)
+
+    # Create new class dynamically
+    combined_class = type(
+        "ComposedStates", (), {"__annotations__": combined_annotations, **combined_fields}
+    )
+
+    # Apply @dataclass first, then @symbolic
+    combined_class = dataclass(combined_class)
+    return symbolic(combined_class)
 
 
 def symbolic(cls):
@@ -297,7 +377,16 @@ def symbolic(cls):
     for f in fields(cls):
         meta = f.metadata or {}
         dim = meta.get("dim", 1)
-        default = meta.get("default", 0.0 if dim == 1 else np.zeros(dim))
+        raw_default = meta.get("default", None)
+
+        # Ensure default is properly formatted for dimension
+        if raw_default is None:
+            default = 0.0 if dim == 1 else [0.0] * dim
+        elif isinstance(raw_default, (int, float)):
+            default = float(raw_default) if dim == 1 else [float(raw_default)] * dim
+        else:
+            default = raw_default
+
         desc = meta.get("desc", "")
         var_type = meta.get("type", "unknown")
         field_info[f.name] = {
@@ -361,7 +450,10 @@ def symbolic(cls):
                 )
 
         # Check if this is a symbolic type (SX or MX)
-        is_symbolic = hasattr(vec, "__class__") and vec.__class__.__name__ in ("SX", "MX")
+        is_symbolic = hasattr(vec, "__class__") and vec.__class__.__name__ in (
+            "SX",
+            "MX",
+        )
 
         # Convert to proper vector (only for numeric)
         if not is_symbolic and not hasattr(vec, "shape"):
@@ -406,7 +498,11 @@ def symbolic(cls):
             List of instances, one per timestep
         """
         # Convert to NumPy
-        if hasattr(matrix, "__class__") and matrix.__class__.__name__ in ("SX", "MX", "DM"):
+        if hasattr(matrix, "__class__") and matrix.__class__.__name__ in (
+            "SX",
+            "MX",
+            "DM",
+        ):
             matrix = np.array(ca.DM(matrix))
         else:
             matrix = np.asarray(matrix)
@@ -519,13 +615,13 @@ class ModelSX(Generic[TState, TInput, TParam]):
         state_type: type[TState],
         input_type: type[TInput],
         param_type: type[TParam],
-        output_type: type[TOutput] = None,
-        algebraic_type: type[TAlgebraic] = None,
-        dependent_type: type[TDependent] = None,
-        quadrature_type: type[TQuadrature] = None,
-        discrete_state_type: type[TDiscreteState] = None,
-        discrete_var_type: type[TDiscreteVar] = None,
-        event_indicator_type: type[TEventIndicator] = None,
+        output_type: type[TOutput] | None = None,
+        algebraic_type: type[TAlgebraic] | None = None,
+        dependent_type: type[TDependent] | None = None,
+        quadrature_type: type[TQuadrature] | None = None,
+        discrete_state_type: type[TDiscreteState] | None = None,
+        discrete_var_type: type[TDiscreteVar] | None = None,
+        event_indicator_type: type[TEventIndicator] | None = None,
     ):
         """Initialize typed hybrid DAE model.
 
@@ -581,9 +677,32 @@ class ModelSX(Generic[TState, TInput, TParam]):
         if event_indicator_type:
             self.c = event_indicator_type.symbolic(ca.SX)
 
+        # Create connection helpers for autocomplete
+        # These are separate from the actual u/y objects used for building
+        class ConnectionHelper:
+            """Helper for accessing signals in connect() calls."""
+
+            def __init__(self, prefix: str, obj):
+                self._prefix = prefix
+                self._obj = obj
+
+            def __getattr__(self, attr: str):
+                if hasattr(self._obj, attr):
+                    return ModelSX.SignalRef(self._prefix, attr)
+                raise AttributeError(f"Signal '{attr}' not found")
+
+        self.inputs = ConnectionHelper("u", self.u)
+        if output_type:
+            self.outputs = ConnectionHelper("y", self.y)
+
     @classmethod
     def create(
-        cls, state_type: type[TState], input_type: type[TInput], param_type: type[TParam], **kwargs
+        cls,
+        state_type: type[TState],
+        input_type: type[TInput],
+        param_type: type[TParam],
+        output_type: type[TOutput] = None,
+        **kwargs,
     ):
         """Create a fully-typed model instance with automatic type inference.
 
@@ -593,20 +712,91 @@ class ModelSX(Generic[TState, TInput, TParam]):
             state_type: Dataclass decorated with @symbolic
             input_type: Dataclass decorated with @symbolic
             param_type: Dataclass decorated with @symbolic
-            **kwargs: Optional types (output_type, algebraic_type, etc.)
+            output_type: Optional output type dataclass
+            **kwargs: Optional types (algebraic_type, dependent_type, etc.)
 
         Returns:
             Fully-typed ModelSX instance
 
         Usage:
-            model = ModelSX.create(States, Inputs, Params)
+            model = ModelSX.create(States, Inputs, Params, Outputs)
             # IDE now knows exact types for autocomplete!
 
             x = model.x()  # x has full autocomplete
             u = model.u()  # u has full autocomplete
             p = model.p()  # p has full autocomplete
         """
-        return cls(state_type, input_type, param_type, **kwargs)
+        return cls(state_type, input_type, param_type, output_type=output_type, **kwargs)
+
+    @classmethod
+    def compose(
+        cls,
+        submodels: dict[str, "ModelSX"],
+        state_type: type[TState] = None,
+        input_type: type[TInput] = None,
+        param_type: type[TParam] = None,
+        output_type: type[TOutput] = None,
+    ):
+        """Compose multiple submodels into a single parent model.
+
+        Creates a parent model with submodels already attached, ready for connections.
+        Automatically composes states from all submodels if not specified.
+
+        Args:
+            submodels: Dictionary of {name: model} pairs
+            state_type: Parent state type (auto-composed from submodels if None)
+            input_type: Parent input type (empty if None)
+            param_type: Parent parameter type (empty if None)
+            output_type: Parent output type (empty if None)
+
+        Returns:
+            Parent model with submodels attached as attributes
+
+        Example:
+            >>> plant = sportcub()
+            >>> controller = autolevel_controller()
+            >>> parent = ModelSX.compose({"plant": plant, "controller": controller})
+            >>> parent.connect(controller.u.q, plant.x.r)
+        """
+        # Auto-compose state type if not provided
+        if state_type is None:
+            state_types = [sub.state_type for sub in submodels.values()]
+            state_type = compose_states(*state_types)
+
+        # Create empty types if not provided
+        if input_type is None:
+
+            @symbolic
+            class EmptyInputs:
+                pass
+
+            input_type = EmptyInputs
+
+        if param_type is None:
+
+            @symbolic
+            class EmptyParams:
+                pass
+
+            param_type = EmptyParams
+
+        if output_type is None:
+
+            @symbolic
+            class EmptyOutputs:
+                pass
+
+            output_type = EmptyOutputs
+
+        # Create parent model
+        parent = cls.create(state_type, input_type, param_type, output_type)
+
+        # Add all submodels and create proxies for connection API
+        for name, submodel in submodels.items():
+            parent.add_submodel(name, submodel)
+            # Submodel proxy is already created by add_submodel
+
+        return parent
 
     @beartype
     def build(
@@ -712,7 +902,12 @@ class ModelSX(Generic[TState, TInput, TParam]):
 
     def _build_f_alg(self, f_alg_expr):
         """Build algebraic constraint function: 0 = g(x, z_alg, u, p)."""
-        inputs = [self.x.as_vec(), self.z_alg.as_vec(), self.u.as_vec(), self.p.as_vec()]
+        inputs = [
+            self.x.as_vec(),
+            self.z_alg.as_vec(),
+            self.u.as_vec(),
+            self.p.as_vec(),
+        ]
         names = ["x", "z_alg", "u", "p"]
         self.f_alg = ca.Function("f_alg", inputs, [f_alg_expr], names, ["residual"])
 
@@ -1088,6 +1283,40 @@ class ModelSX(Generic[TState, TInput, TParam]):
 
     # Hierarchical Model Composition
     # ============================================================================
+    # Hierarchical Composition
+    # ============================================================================
+
+    class SignalRef:
+        """Reference to a signal in a model for autocomplete-friendly connections."""
+
+        def __init__(self, model_name: str, signal_name: str):
+            self.model_name = model_name
+            self.signal_name = signal_name
+            self._path = f"{model_name}.{signal_name}"
+
+        def __str__(self):
+            return self._path
+
+        def __repr__(self):
+            return f"SignalRef('{self._path}')"
+
+    class SubmodelProxy:
+        """Proxy object that allows attribute access to submodel signals."""
+
+        def __init__(self, name: str, model: "ModelSX"):
+            self._name = name
+            self._model = model
+
+        def __getattr__(self, attr: str):
+            # Check if attribute exists in submodel's state, input, or output
+            if hasattr(self._model, "x") and hasattr(self._model.x, attr):
+                return ModelSX.SignalRef(self._name, attr)
+            elif hasattr(self._model, "u") and hasattr(self._model.u, attr):
+                return ModelSX.SignalRef(self._name, attr)
+            elif hasattr(self._model, "y") and hasattr(self._model.y, attr):
+                return ModelSX.SignalRef(self._name, attr)
+            else:
+                raise AttributeError(f"Signal '{attr}' not found in submodel '{self._name}'")
 
     def add_submodel(
         self,
@@ -1133,12 +1362,90 @@ class ModelSX(Generic[TState, TInput, TParam]):
             raise ValueError(f"Submodel '{name}' already exists")
 
         self._submodels[name] = submodel
+
+        # Create proxy for autocomplete-friendly signal access
+        setattr(self, name, self.SubmodelProxy(name, submodel))
+
         if state_connections:
             self._state_connections[name] = state_connections
         if input_connections:
             self._input_connections[name] = input_connections
         if output_connections:
             self._output_connections[name] = output_connections
+
+    def connect(self, target, source):
+        """Add a connection between signals in a more readable way.
+
+        Accepts either string paths or SignalRef objects for autocomplete support.
+
+        Args:
+            target: Target signal (SignalRef or string like "controller.u.q" or "y.ail")
+            source: Source signal (SignalRef or string like "plant.x.r" or "u.ail_manual")
+
+        Example:
+            >>> parent.connect("controller.u.q", "plant.x.r")
+            >>> parent.connect(parent.controller.u.q, parent.plant.x.r)
+        """
+        # Import casadi to check for symbolic types
+        import casadi as ca
+
+        # Helper to convert signal references to path strings
+        def to_path_string(sig):
+            if isinstance(sig, self.SignalRef):
+                return str(sig)
+            elif isinstance(sig, (ca.SX, ca.MX, ca.DM)):
+                # CasADi symbols don't carry model/signal path information
+                raise TypeError(
+                    f"Cannot connect CasADi symbol directly: {sig}. "
+                    f"Use string paths like 'controller.u.q' or SignalRef via parent.controller.u.q"
+                )
+            else:
+                return sig
+
+        target_str = to_path_string(target)
+        source_str = to_path_string(source)
+
+        if not hasattr(self, "_submodels"):
+            self._submodels = {}
+            self._state_connections = {}
+            self._input_connections = {}
+            self._output_connections = {}
+
+        # Parse target to determine connection type
+        # Supports both formats:
+        # - "model.signal" (legacy 2-part for direct signal access)
+        # - "model.type.field" (3-part for structured signals like controller.u.q)
+        target_parts = target_str.split(".")
+        source_parts = source_str.split(".")
+
+        if len(target_parts) < 2:
+            raise ValueError(
+                f"Invalid target format: {target_str}. Expected 'model.signal' or 'model.type.field'"
+            )
+
+        # Determine connection type based on first part of target
+        target_model = target_parts[0]
+
+        # Determine connection type based on target
+        if target_model == "y":
+            # Output connection: submodel output -> parent output
+            # Format: "y.field" or "y.field" <- "model.y.field"
+            source_model = source_parts[0]
+            if source_model not in self._output_connections:
+                self._output_connections[source_model] = {}
+            self._output_connections[source_model][source_str] = target_str
+        elif target_model == "x":
+            # State connection (rarely used)
+            source_model = source_parts[0]
+            if source_model not in self._state_connections:
+                self._state_connections[source_model] = {}
+            self._state_connections[source_model][source_str] = target_str
+        else:
+            # Input connection: anything -> submodel input
+            # Format: "model.u.field" <- "other.x.field" or "u.field"
+            if target_model not in self._input_connections:
+                self._input_connections[target_model] = {}
+            self._input_connections[target_model][target_str] = source_str
 
     def build_composed(self, integrator: str = "rk4", integrator_options: dict = None):
         """Build a composed model from added submodels.
@@ -1188,77 +1495,184 @@ class ModelSX(Generic[TState, TInput, TParam]):
         for name, (start, end) in submodel_state_slices.items():
             submodel_states[name] = x_combined[start:end]
 
-        # First pass: Evaluate all submodel outputs to establish signal sources
+        # Build input vectors for each submodel by resolving connections
+        # We need to do this iteratively because outputs depend on inputs
+        # For now, we'll do a simple two-pass approach:
+        # Pass 1: Resolve state connections
+        # Pass 2: Resolve output connections after evaluating outputs with state-connected inputs
+
+        submodel_inputs = {}
         submodel_outputs = {}
+
+        # First pass: Build preliminary inputs with only state connections resolved
+        for name, submodel in self._submodels.items():
+            u_sub_dict = {}
+            input_conns = self._input_connections.get(name, {})
+
+            for field_obj in fields(submodel.u):
+                field_name = field_obj.name
+                full_path = f"{name}.u.{field_name}"
+
+                if full_path in input_conns:
+                    source = input_conns[full_path]
+                    parts = source.split(".", 2)
+
+                    if len(parts) >= 3 and parts[1] == "x":
+                        # State connection - resolve immediately
+                        source_model, source_type, source_field = parts
+                        if source_model in submodel_states:
+                            source_submodel = self._submodels[source_model]
+                            if hasattr(source_submodel.x, source_field):
+                                source_x = source_submodel.x
+                                x_vec = submodel_states[source_model]
+
+                                offset = 0
+                                for fld in fields(source_x):
+                                    if fld.name == source_field:
+                                        field_val = getattr(source_x, fld.name)
+                                        field_size = (
+                                            field_val.shape[0] if hasattr(field_val, "shape") else 1
+                                        )
+                                        u_sub_dict[field_name] = x_vec[offset : offset + field_size]
+                                        break
+                                    else:
+                                        fld_val = getattr(source_x, fld.name)
+                                        fld_size = (
+                                            fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                        )
+                                        offset += fld_size
+                                else:
+                                    u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                            else:
+                                u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                        else:
+                            u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                    else:
+                        # Output or parent input connection - use default for now
+                        u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                else:
+                    u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+
+            # Build preliminary input vector
+            u_sub_list = [u_sub_dict[f.name] for f in fields(submodel.u)]
+            submodel_inputs[name] = ca.vertcat(*u_sub_list) if u_sub_list else ca.DM.zeros(0, 1)
+
+        # Evaluate all submodel outputs with preliminary inputs
         for name, submodel in self._submodels.items():
             if hasattr(submodel, "f_y"):
                 x_sub = submodel_states[name]
-                u_sub = submodel.u0.as_vec()  # Placeholder, will be resolved
+                u_sub = submodel_inputs[name]
                 p_sub = submodel.p0.as_vec()
-
-                # Evaluate outputs
                 y_sub = submodel.f_y(x_sub, u_sub, p_sub)
                 submodel_outputs[name] = y_sub
 
-        # Second pass: Build input vectors for each submodel by resolving connections
-        submodel_inputs = {}
+        # Second pass: Resolve output connections now that outputs are available
         for name, submodel in self._submodels.items():
-            u_sub_list = []
+            u_sub_dict = {}
             input_conns = self._input_connections.get(name, {})
 
-            for idx, input_name in enumerate(submodel.input_names):
-                full_name = f"{name}.{input_name}"
+            for field_obj in fields(submodel.u):
+                field_name = field_obj.name
+                full_path = f"{name}.u.{field_name}"
 
-                if full_name in input_conns:
-                    # Input is connected to something
-                    source = input_conns[full_name]
+                if full_path in input_conns:
+                    source = input_conns[full_path]
 
                     if source.startswith("u."):
                         # Connected to parent input
-                        parent_input = source[2:]
-                        if parent_input in self._input_index:
-                            u_sub_list.append(u_parent[self._input_index[parent_input]])
+                        parent_field = source[2:]
+                        if hasattr(self.u, parent_field):
+                            u_sub_dict[field_name] = getattr(self.u, parent_field)
                         else:
-                            # Use default if parent input doesn't exist
-                            u_sub_list.append(submodel.u0.as_vec()[idx])
+                            u_sub_dict[field_name] = getattr(submodel.u0, field_name)
 
                     elif "." in source:
-                        # Connected to another submodel's output or state
-                        parts = source.split(".")
-                        source_model = parts[0]
-                        source_signal = ".".join(parts[1:])
+                        parts = source.split(".", 2)
+                        if len(parts) >= 3:
+                            source_model, source_type, source_field = parts
 
-                        # Check if it's an output
-                        if source_model in submodel_outputs:
-                            source_submodel = self._submodels[source_model]
-                            if (
-                                hasattr(source_submodel, "_output_index")
-                                and source_signal in source_submodel._output_index
-                            ):
-                                output_idx = source_submodel._output_index[source_signal]
-                                u_sub_list.append(submodel_outputs[source_model][output_idx])
-                            else:
-                                # Try as state
-                                if source_signal in source_submodel._state_index:
-                                    state_idx = source_submodel._state_index[source_signal]
-                                    u_sub_list.append(submodel_states[source_model][state_idx])
+                            if source_type == "y":
+                                # Output connection
+                                if source_model in submodel_outputs:
+                                    source_submodel = self._submodels[source_model]
+                                    if hasattr(source_submodel.y, source_field):
+                                        source_y = source_submodel.y
+                                        y_vec = submodel_outputs[source_model]
+
+                                        offset = 0
+                                        for fld in fields(source_y):
+                                            if fld.name == source_field:
+                                                field_val = getattr(source_y, fld.name)
+                                                field_size = (
+                                                    field_val.shape[0]
+                                                    if hasattr(field_val, "shape")
+                                                    else 1
+                                                )
+                                                u_sub_dict[field_name] = y_vec[
+                                                    offset : offset + field_size
+                                                ]
+                                                break
+                                            else:
+                                                fld_val = getattr(source_y, fld.name)
+                                                fld_size = (
+                                                    fld_val.shape[0]
+                                                    if hasattr(fld_val, "shape")
+                                                    else 1
+                                                )
+                                                offset += fld_size
+                                        else:
+                                            u_sub_dict[field_name] = getattr(
+                                                submodel.u0, field_name
+                                            )
+                                    else:
+                                        u_sub_dict[field_name] = getattr(submodel.u0, field_name)
                                 else:
-                                    # Default value
-                                    u_sub_list.append(submodel.u0.as_vec()[idx])
-                        else:
-                            # Use default
-                            u_sub_list.append(submodel.u0.as_vec()[idx])
-                    else:
-                        # Use default value
-                        u_sub_list.append(submodel.u0.as_vec()[idx])
-                else:
-                    # No connection, use default value
-                    u_sub_list.append(submodel.u0.as_vec()[idx])
+                                    u_sub_dict[field_name] = getattr(submodel.u0, field_name)
 
-            # Build input vector for this submodel
+                            elif source_type == "x":
+                                # State connection - already resolved in first pass
+                                source_submodel = self._submodels[source_model]
+                                if hasattr(source_submodel.x, source_field):
+                                    source_x = source_submodel.x
+                                    x_vec = submodel_states[source_model]
+
+                                    offset = 0
+                                    for fld in fields(source_x):
+                                        if fld.name == source_field:
+                                            field_val = getattr(source_x, fld.name)
+                                            field_size = (
+                                                field_val.shape[0]
+                                                if hasattr(field_val, "shape")
+                                                else 1
+                                            )
+                                            u_sub_dict[field_name] = x_vec[
+                                                offset : offset + field_size
+                                            ]
+                                            break
+                                        else:
+                                            fld_val = getattr(source_x, fld.name)
+                                            fld_size = (
+                                                fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                            )
+                                            offset += fld_size
+                                    else:
+                                        u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                                else:
+                                    u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                            else:
+                                u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                        else:
+                            u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                    else:
+                        u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                else:
+                    u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+
+            # Build final input vector
+            u_sub_list = [u_sub_dict[f.name] for f in fields(submodel.u)]
             submodel_inputs[name] = ca.vertcat(*u_sub_list) if u_sub_list else ca.DM.zeros(0, 1)
 
-        # Third pass: Evaluate each submodel's dynamics with resolved inputs
+        # Evaluate each submodel's dynamics with resolved inputs
         f_x_parts = []
         for name, submodel in self._submodels.items():
             x_sub = submodel_states[name]
@@ -1282,24 +1696,145 @@ class ModelSX(Generic[TState, TInput, TParam]):
         )
 
         # Build composed output function if parent has output type
-        if self.output_type is not None:
-            # Map parent outputs from submodel outputs
-            y_parts = []
-            output_conns = {}
-            for name in self._submodels.keys():
-                if name in self._output_connections:
-                    output_conns.update(self._output_connections[name])
+        if self.output_type is not None and hasattr(self, "y"):
+            # Build parent output by evaluating submodel outputs
+            # We need fresh symbolic variables for the output function
+            x_out = ca.SX.sym("x", total_states)
+            u_out = ca.SX.sym("u", u_parent.shape[0])
+            p_out = ca.SX.sym("p", p_parent.shape[0])
 
-            # For now, create a simple output that concatenates submodel outputs
-            # TODO: Implement proper output mapping based on output_connections
-            if hasattr(self, "y"):
-                self.f_y = ca.Function(
-                    "f_y_composed",
-                    [x_combined, u_parent, p_parent],
-                    [self.y.as_vec()],  # Placeholder
-                    ["x", "u", "p"],
-                    ["y"],
-                )
+            # Build parent output vector by evaluating submodel outputs
+            parent_y_parts = []
+
+            # Track which parent output fields have been set
+            parent_y_dict = {}
+            for field_obj in fields(self.y):
+                field_val = getattr(self.y, field_obj.name)
+                field_size = field_val.shape[0] if hasattr(field_val, "shape") else 1
+                parent_y_dict[field_obj.name] = ca.DM.zeros(field_size, 1)
+
+            # Evaluate each submodel's output and extract connected fields
+            for source_model, connections in self._output_connections.items():
+                submodel = self._submodels.get(source_model)
+                if submodel is None or not hasattr(submodel, "f_y"):
+                    continue
+
+                # Extract submodel state
+                start, end = submodel_state_slices[source_model]
+                x_sub = x_out[start:end]
+
+                # Build submodel input (resolve connections)
+                u_sub_dict = {}
+                input_conns = self._input_connections.get(source_model, {})
+
+                for field_obj in fields(submodel.u):
+                    field_name = field_obj.name
+                    full_path = f"{source_model}.u.{field_name}"
+
+                    if full_path in input_conns:
+                        source = input_conns[full_path]
+
+                        if source.startswith("u."):
+                            # Connected to parent input - extract from u_out
+                            parent_field = source[2:]
+                            offset = 0
+                            for fld in fields(self.u):
+                                if fld.name == parent_field:
+                                    fld_val = getattr(self.u, fld.name)
+                                    fld_size = fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                    u_sub_dict[field_name] = u_out[offset : offset + fld_size]
+                                    break
+                                else:
+                                    fld_val = getattr(self.u, fld.name)
+                                    fld_size = fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                    offset += fld_size
+                            else:
+                                u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                        elif "." in source:
+                            parts = source.split(".", 2)
+                            if len(parts) >= 3:
+                                src_model, src_type, src_field = parts
+
+                                if src_type == "x":
+                                    # State connection - extract from x_out
+                                    src_start, src_end = submodel_state_slices.get(
+                                        src_model, (0, 0)
+                                    )
+                                    src_x_vec = x_out[src_start:src_end]
+                                    src_submodel = self._submodels[src_model]
+
+                                    offset = 0
+                                    for fld in fields(src_submodel.x):
+                                        if fld.name == src_field:
+                                            fld_val = getattr(src_submodel.x, fld.name)
+                                            fld_size = (
+                                                fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                            )
+                                            u_sub_dict[field_name] = src_x_vec[
+                                                offset : offset + fld_size
+                                            ]
+                                            break
+                                        else:
+                                            fld_val = getattr(src_submodel.x, fld.name)
+                                            fld_size = (
+                                                fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                            )
+                                            offset += fld_size
+                                    else:
+                                        u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                                else:
+                                    u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                        else:
+                            u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                    else:
+                        u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+
+                # Build submodel input vector
+                u_sub_list = [u_sub_dict[f.name] for f in fields(submodel.u)]
+                u_sub = ca.vertcat(*u_sub_list) if u_sub_list else ca.DM.zeros(0, 1)
+
+                # Build submodel parameter vector
+                p_sub = submodel.p0.as_vec()
+
+                # Evaluate submodel output
+                y_sub_vec = submodel.f_y(x_sub, u_sub, p_sub)
+
+                # Extract fields and assign to parent output
+                for source_str, target_str in connections.items():
+                    target_parts = target_str.split(".")
+                    if len(target_parts) < 2:
+                        continue
+                    to_field = target_parts[1]
+
+                    source_parts = source_str.split(".")
+                    if len(source_parts) < 3:
+                        continue
+                    source_field = source_parts[2]
+
+                    # Find the field in the submodel output vector
+                    offset = 0
+                    for fld in fields(submodel.y):
+                        if fld.name == source_field:
+                            fld_val = getattr(submodel.y, fld.name)
+                            fld_size = fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                            parent_y_dict[to_field] = y_sub_vec[offset : offset + fld_size]
+                            break
+                        else:
+                            fld_val = getattr(submodel.y, fld.name)
+                            fld_size = fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                            offset += fld_size
+
+            # Assemble parent output vector
+            parent_y_list = [parent_y_dict[f.name] for f in fields(self.y)]
+            parent_y_vec = ca.vertcat(*parent_y_list) if parent_y_list else ca.DM.zeros(0, 1)
+
+            self.f_y = ca.Function(
+                "f_y_composed",
+                [x_out, u_out, p_out],
+                [parent_y_vec],
+                ["x", "u", "p"],
+                ["y"],
+            )
 
         # Store composition metadata BEFORE building integrator
         # (integrator builders check _composed and _total_composed_states)
@@ -1320,8 +1855,42 @@ class ModelSX(Generic[TState, TInput, TParam]):
         for name in self._submodels.keys():
             x0_parts.append(self._submodels[name].x0.as_vec())
 
-        # Create a compatible x0 structure
+        # Create a compatible x0 structure - flat numeric vector
         self.x0_composed = ca.vertcat(*x0_parts) if x0_parts else ca.DM.zeros(0, 1)
+
+        # Create a structured initial state that provides field access to submodel states
+        # This allows sim.py to access states like: x.plant.p, x.controller.i_p, etc.
+        from types import SimpleNamespace
+
+        self.x0 = SimpleNamespace()
+        for name, submodel in self._submodels.items():
+            setattr(self.x0, name, copy.deepcopy(submodel.x0))
+
+        # Also create a helper to convert between structured and vector forms
+        self._state_to_vec = lambda x_struct: ca.vertcat(
+            *[getattr(x_struct, name).as_vec() for name in self._submodels.keys()]
+        )
+
+        def _vec_to_state(x_vec):
+            """Convert vector state back to structured form."""
+            x_struct = SimpleNamespace()
+            for name, (start, end) in self._submodel_state_slices.items():
+                submodel = self._submodels[name]
+                x_sub_vec = x_vec[start:end]
+                x_struct_sub = copy.deepcopy(submodel.x0)
+
+                # Update each field from the vector slice
+                offset = 0
+                for field_obj in fields(x_struct_sub):
+                    field_val = getattr(x_struct_sub, field_obj.name)
+                    field_size = field_val.shape[0] if hasattr(field_val, "shape") else 1
+                    setattr(x_struct_sub, field_obj.name, x_sub_vec[offset : offset + field_size])
+                    offset += field_size
+
+                setattr(x_struct, name, x_struct_sub)
+            return x_struct
+
+        self._vec_to_state = _vec_to_state
 
     # Utility methods
     def saturate(self, val, lower, upper):
@@ -1372,13 +1941,21 @@ class ModelMX(ModelSX[TState, TInput, TParam]):
 
     @classmethod
     def create(
-        cls, state_type: type[TState], input_type: type[TInput], param_type: type[TParam], **kwargs
+        cls,
+        state_type: type[TState],
+        input_type: type[TInput],
+        param_type: type[TParam],
+        **kwargs,
     ):
         """Create a fully-typed MX model instance with automatic type inference."""
         return cls(state_type, input_type, param_type, **kwargs)
 
     def __init__(
-        self, state_type: type[TState], input_type: type[TInput], param_type: type[TParam], **kwargs
+        self,
+        state_type: type[TState],
+        input_type: type[TInput],
+        param_type: type[TParam],
+        **kwargs,
     ):
         """Initialize MX-based model."""
         # Set MX before calling parent __init__
@@ -1472,5 +2049,9 @@ class ModelMX(ModelSX[TState, TInput, TParam]):
         x_next = x_sym + dt_sym * dx_dt
 
         self.f_step = ca.Function(
-            "f_step", [x_sym, u_sym, p_sym, dt_sym], [x_next], ["x", "u", "p", "dt"], ["x_next"]
+            "f_step",
+            [x_sym, u_sym, p_sym, dt_sym],
+            [x_next],
+            ["x", "u", "p", "dt"],
+            ["x_next"],
         )

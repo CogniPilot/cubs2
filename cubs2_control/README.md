@@ -10,6 +10,72 @@ Control algorithms for Cubs2 aircraft. These controllers are designed to be reus
 
 ## Controllers
 
+### Autolevel Controller
+
+`autolevel_controller.py` - Attitude stabilization controller for fixed-wing aircraft.
+
+**Features:**
+- Roll (phi) and pitch (theta) stabilization
+- Airspeed tracking
+- Manual mode pass-through
+- Anti-windup for integral terms
+- ModelSX-based for composition with aircraft dynamics
+
+**Usage:**
+
+```python
+from cubs2_control.autolevel_controller import autolevel_controller
+from cubs2_dynamics.sportcub import sportcub
+from cubs2_dynamics.model import ModelSX
+
+# Create controller
+ctrl = autolevel_controller()
+
+# Or compose with aircraft for closed-loop simulation
+aircraft = sportcub()
+parent = ModelSX.compose({
+    "plant": aircraft,
+    "controller": ctrl
+})
+parent.connect("controller.u.q", "plant.x.r")
+parent.connect("plant.u.ail", "controller.y.ail")
+parent.build_composed(integrator="rk4")
+```
+
+### Closed-Loop System
+
+`closed_loop.py` - Pre-configured closed-loop system combining SportCub aircraft with autolevel controller.
+
+**Features:**
+- Single function to create integrated system
+- All connections pre-configured
+- Manual control inputs preserved
+- Mode switching (manual/stabilized)
+
+**Usage:**
+
+```python
+from cubs2_control.closed_loop import closed_loop_sportcub
+
+# Get ready-to-use closed-loop model
+model = closed_loop_sportcub()
+
+# Access structured states
+model.x0.plant.p  # Aircraft position
+model.x0.controller.i_p  # Controller integral state
+
+# Simulate
+x_next = model.f_step(
+    x=model._state_to_vec(model.x0),
+    u=model.u0.as_vec(),
+    p=model.p0.as_vec(),
+    dt=0.01
+)
+
+# Convert back to structured form
+x_struct = model._vec_to_state(x_next["x_next"])
+```
+
 ### PID Controller
 
 `pid_controller.py` - Classic PID control with anti-windup.

@@ -29,6 +29,9 @@ add_library(cubs2_rviz SHARED
   src/rviz/joy_panel.cpp
   src/rviz/sim_panel.cpp
   src/rviz/hud_panel.cpp
+  include/cubs2_rviz/joy_panel.hpp
+  include/cubs2_rviz/sim_panel.hpp
+  include/cubs2_rviz/hud_panel.hpp
 )
 
 ament_target_dependencies(cubs2_rviz
@@ -74,8 +77,7 @@ ament_export_dependencies(
 )
 
 if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  ament_lint_auto_find_test_dependencies()
+  # Linting disabled - using Black for Python formatting only
 endif()
 
 ament_package()

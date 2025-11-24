@@ -34,7 +34,8 @@ SimPanel::SimPanel(QWidget* parent) : rviz_common::Panel(parent) {
           &SimPanel::onSpeedChanged);
 
   // Time step selector
-  // Note: Ground contact dynamics require dt < ~3ms for Nyquist stability (ωₙ=350 rad/s)
+  // Note: Ground contact dynamics require dt < ~3ms for Nyquist stability
+  // (ωₙ=350 rad/s)
   dt_combo_ = new QComboBox();
   dt_combo_->addItem("dt: 0.001s", 0.001);
   dt_combo_->addItem("dt: 0.002s", 0.002);
@@ -48,7 +49,7 @@ SimPanel::SimPanel(QWidget* parent) : rviz_common::Panel(parent) {
 
   setLayout(layout);
 
-  node_ = std::make_shared<rclcpp::Node>("fixed_wing_purt_reset_panel");
+  node_ = std::make_shared<rclcpp::Node>("cubs2_reset_panel");
   reset_publisher_ = node_->create_publisher<std_msgs::msg::Empty>("/reset", 10);
   pause_publisher_ = node_->create_publisher<std_msgs::msg::Empty>("/pause", 10);
   speed_publisher_ = node_->create_publisher<std_msgs::msg::Float64>("/set_speed", 10);
@@ -63,7 +64,11 @@ SimPanel::SimPanel(QWidget* parent) : rviz_common::Panel(parent) {
         resetUiControls();
       });
 
-  std::thread([n = node_]() { rclcpp::spin(n); }).detach();
+  // Create timer for spinning ROS2 node (process callbacks in Qt thread)
+  ros_spin_timer_ = new QTimer(this);
+  ros_spin_timer_->setInterval(10);  // 100 Hz for responsive callbacks
+  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() { rclcpp::spin_some(node_); });
+  ros_spin_timer_->start();
 }
 
 SimPanel::~SimPanel() = default;

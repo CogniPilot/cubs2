@@ -5,9 +5,11 @@ Aircraft dynamics modeling and analysis tools for Cubs2. This package provides p
 ## Features
 
 - **Differentiable dynamics models** - Using CasADi for automatic differentiation
+- **Hierarchical model composition** - Combine multiple models into integrated systems
+- **Type-safe modeling** - Structured dataclass-based state, input, and output definitions
 - **Linearization** - Compute linear approximations around operating points
 - **Trim analysis** - Find equilibrium flight conditions
-- **Numerical integration** - RK4 and other integrators
+- **Numerical integration** - RK4 and other integrators with single-loop composition
 - **SportCub model** - Complete 6-DOF aircraft dynamics
 
 ## Modules
@@ -31,6 +33,47 @@ Aircraft dynamics modeling and analysis tools for Cubs2. This package provides p
 - `trim_fixed_wing.py` - Compute trim conditions for steady flight
 
 ## Usage
+
+### Hierarchical Model Composition
+
+The framework supports composing multiple subsystem models into a single integrated model with a unified integration loop:
+
+```python
+from cubs2_dynamics.model import ModelSX
+from cubs2_dynamics.sportcub import sportcub
+from cubs2_control.autolevel_controller import autolevel_controller
+
+# Create submodels
+aircraft = sportcub()
+controller = autolevel_controller()
+
+# Compose into parent system
+parent = ModelSX.compose({
+    "plant": aircraft,
+    "controller": controller
+})
+
+# Connect signals between subsystems
+parent.connect("controller.u.q", "plant.x.r")  # Controller reads aircraft orientation
+parent.connect("controller.u.omega", "plant.x.w")  # Controller reads angular velocity
+parent.connect("plant.u.ail", "controller.y.ail")  # Aircraft gets aileron command
+
+# Build integrated dynamics with single RK4 integrator
+parent.build_composed(integrator="rk4")
+
+# Simulate composed system (single integration step for all subsystems)
+x_next = parent.f_step(x=x0_vec, u=u_vec, p=p_vec, dt=0.01)
+
+# Access subsystem states with structured syntax
+aircraft_pos = x0.plant.p  # Aircraft position
+controller_integral = x0.controller.i_p  # Controller integral state
+```
+
+**Key Features:**
+- **Single integration loop** - All subsystems integrated together for numerical accuracy
+- **Structured state access** - `x.plant.p`, `x.controller.i_p` instead of index-based access
+- **Type-safe connections** - String-based paths with compile-time validation
+- **Automatic state composition** - Parent state created by merging subsystem states
 
 ### Simulate Aircraft Dynamics
 

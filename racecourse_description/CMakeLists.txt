@@ -17,11 +17,10 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install racecourse configuration files, meshes, and launch files
+# Install meshes to share (for package:// URI resolution)
 install(DIRECTORY
-  config
-  meshes
-  DESTINATION lib/${PROJECT_NAME}
+  config meshes
+  DESTINATION share/${PROJECT_NAME}
 )
 
 # Testing

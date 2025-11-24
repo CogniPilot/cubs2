@@ -1,5 +1,7 @@
 # racecourse_description
 
+![Figure-8 Racecourse](images/figure8.png)
+
 Racecourse environment configuration and visualization for Cubs2 aircraft racing.
 
 ## Features

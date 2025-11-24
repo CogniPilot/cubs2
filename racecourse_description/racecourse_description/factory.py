@@ -1,12 +1,13 @@
 # fixed_wing_purt/racecourse/factory.py
 
 import math
+
 import numpy as np
-from visualization_msgs.msg import Marker
+from builtin_interfaces.msg import Duration
 from geometry_msgs.msg import Point, Pose, Quaternion
 from std_msgs.msg import ColorRGBA, Header
-from builtin_interfaces.msg import Duration
 from tf_transformations import quaternion_from_euler
+from visualization_msgs.msg import Marker
 
 
 class MarkerFactory:
@@ -108,7 +109,7 @@ class MarkerFactory:
         m.color.r = 0.0
         m.color.g = 0.4
         m.color.b = 1.0
-        m.color.a = 1.0
+        m.color.a = 0.2
 
         return m
 

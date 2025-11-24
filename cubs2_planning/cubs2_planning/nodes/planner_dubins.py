@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
+import numpy as np
 import rclpy
-from rclpy.node import Node
-from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point, TransformStamped
+from cubs2_planning.planner.dubins import DubinsPathType, derive_dubins
+from geometry_msgs.msg import Point, PoseStamped, TransformStamped
 from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
+from racecourse_description.factory import MarkerFactory
+from racecourse_description.loader import RacecourseLoader
+from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 from tf_transformations import quaternion_from_euler
-import numpy as np
-
-from cubs2_planning.planner.dubins import derive_dubins, DubinsPathType
-from racecourse_description.loader import RacecourseLoader
-from racecourse_description.factory import MarkerFactory
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 class DubinsGatePlannerNode(Node):
@@ -19,7 +17,7 @@ class DubinsGatePlannerNode(Node):
         super().__init__("dubins_gate_planner")
 
         self.declare_parameter(
-            "racecourse_yaml", "package://fixed_wing_purt/resources/config/racecourse.yaml"
+            "racecourse_yaml", "package://racecourse_description/config/racecourse.yaml"
         )
         self.declare_parameter("turn_radius", 3.0)
         self.declare_parameter("sample_points", 200)
