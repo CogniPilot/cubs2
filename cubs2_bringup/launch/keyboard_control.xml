@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Launch keyboard control node in its own terminal using xterm -->
+  <node pkg="cubs2_simulation" exec="keyboard_control.py" name="keyboard_control" launch-prefix="xterm -e"/>
+</launch>

@@ -1,0 +1,23 @@
+<library path="cubs2_rviz">
+  <class name="cubs2::SimPanel"
+         type="cubs2::SimPanel"
+         base_class_type="rviz_common::Panel">
+    <description>
+      Simulation controls: Reset, Pause, Speed, Time step.
+    </description>
+  </class>
+  <class name="cubs2::JoyPanel"
+         type="cubs2::JoyPanel"
+         base_class_type="rviz_common::Panel">
+    <description>
+      Virtual joystick controls for RC plane (aileron, elevator, throttle, rudder).
+    </description>
+  </class>
+  <class name="cubs2::HUDPanel"
+         type="cubs2::HUDPanel"
+         base_class_type="rviz_common::Panel">
+    <description>
+      Heads-Up Display showing attitude (roll/pitch/yaw), altitude, and airspeed.
+    </description>
+  </class>
+</library>

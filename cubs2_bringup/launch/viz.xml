@@ -1,0 +1,35 @@
+<launch>
+
+    <arg name="use_sim_time" default="true"/>
+    <arg name="course_yaml" default="$(find-pkg-share racecourse_description)/config/racecourse.yaml"/>
+    <arg name="reference_urdf" default="$(find-pkg-share cubs2_description)/urdf/sportcub.urdf.xacro"/>
+
+    <node pkg="racecourse_description" exec="racecourse_markers.py" output="screen">
+        <param name="course_yaml" value="$(var course_yaml)"/>
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <node pkg="rviz2" exec="rviz2"
+          args="-d $(find-pkg-share cubs2_rviz)/config/cubs2.rviz">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <!-- Reference frame robot_state_publisher -->
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="reference" output="screen">
+        <remap from="robot_description" to="/reference/description"/>
+        <remap from="joint_states" to="/joint_states"/>
+        <param name="robot_description"
+               value="$(command 'xacro $(var reference_urdf) frame_id:=reference')"/>
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="publish_frequency" value="0.0"/>  <!-- Don't subscribe to joint_states -->
+    </node>
+
+    <!-- Vehicle frame robot_state_publisher -->
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="vehicle" output="screen">
+        <remap from="robot_description" to="/vehicle/description"/>
+        <param name="robot_description"
+               value="$(command 'xacro $(var reference_urdf) frame_id:=vehicle show_forces:=true')"/>
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+</launch>

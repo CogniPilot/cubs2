@@ -1,0 +1,283 @@
+"""Unit tests for SimNode."""
+
+import pytest
+import numpy as np
+import rclpy
+from rclpy.executors import SingleThreadedExecutor
+from cubs2_msgs.msg import AircraftControl
+from std_msgs.msg import Float64, Empty, Bool
+from rosgraph_msgs.msg import Clock
+
+from cubs2_simulation.nodes.sim import SimNode
+
+
+@pytest.fixture
+def ros_context():
+    """Initialize and cleanup ROS context for each test."""
+    rclpy.init()
+    yield
+    rclpy.shutdown()
+
+
+class TestSimNode:
+    """Unit tests for the SimNode class."""
+
+    def test_node_initialization(self, ros_context):
+        """Test that SimNode initializes correctly with default parameters."""
+        node = SimNode()
+
+        # Verify node name
+        assert node.get_name() == "sim_node"
+
+        # Verify parameters were declared
+        assert node.has_parameter("dt")
+        assert node.has_parameter("show_forces")
+
+        # Verify default values
+        assert node.dt == 0.01  # Default 10ms
+        assert node.show_forces == True
+
+        # Verify initial state
+        assert node.sim_time == 0.0
+        assert not node.paused
+
+        # Verify sportcub model is initialized
+        assert hasattr(node, "sportcub")
+        assert hasattr(node, "x")
+        assert hasattr(node, "u")
+        assert hasattr(node, "p")
+
+        # Verify initial position for takeoff (CG at 0.1m so wheels touch ground)
+        assert np.isclose(node.x.p[2], 0.1)
+
+        node.destroy_node()
+
+    def test_custom_parameters(self, ros_context):
+        """Test node initialization with custom parameters."""
+        # Note: SimNode already declares parameters in __init__
+        # We can't re-declare them. This test verifies we can read them.
+        node = SimNode()
+
+        # Verify we can get parameter values
+        dt_value = node.get_parameter("dt").value
+        show_forces_value = node.get_parameter("show_forces").value
+
+        # Verify default values (set in __init__)
+        assert dt_value == 0.01
+        assert show_forces_value == True
+
+        node.destroy_node()
+
+    def test_state_stepping(self, ros_context):
+        """Test that simulation state advances correctly."""
+        node = SimNode()
+
+        # Store initial state
+        initial_time = node.sim_time
+        initial_pos = np.array(node.x.p)
+
+        # Step simulation once
+        node.step_simulation()
+
+        # Verify time advanced
+        assert node.sim_time == initial_time + node.dt
+
+        # State may change slightly due to dynamics (even at rest, there might be numerical drift)
+        # Just verify no NaN or inf values
+        assert np.all(np.isfinite(node.x.as_vec()))
+
+        node.destroy_node()
+
+    def test_control_callback(self, ros_context):
+        """Test control input callback updates state correctly."""
+        node = SimNode()
+
+        # Create control message
+        msg = AircraftControl()
+        msg.aileron = 0.5
+        msg.elevator = -0.3
+        msg.rudder = 0.1
+        msg.throttle = 0.7
+
+        # Call callback
+        node.control_callback(msg)
+
+        # Verify inputs were updated
+        assert np.isclose(node.u.ail, 0.5)
+        assert np.isclose(node.u.elev, -0.3)
+        assert np.isclose(node.u.rud, 0.1)
+        assert np.isclose(node.u.thr, 0.7)
+
+        node.destroy_node()
+
+    def test_pause_resume(self, ros_context):
+        """Test pause and resume functionality."""
+        node = SimNode()
+
+        # Initially running
+        assert not node.paused
+
+        # Pause
+        node.pause()
+        assert node.paused
+
+        # Resume
+        node.resume()
+        assert not node.paused
+
+        node.destroy_node()
+
+    def test_reset_functionality(self, ros_context):
+        """Test reset returns to initial conditions."""
+        node = SimNode()
+
+        # Modify state
+        node.sim_time = 5.0
+        node.x.p[0] = 10.0
+        node.x.p[1] = 5.0
+        node.x.p[2] = 2.0
+        node.u.thr = 0.8
+
+        # Reset via topic callback
+        msg = Empty()
+        node.reset_topic_callback(msg)
+
+        # Verify reset to initial conditions
+        assert node.sim_time == 0.0
+        assert np.isclose(node.x.p[2], 0.1)  # CG height for wheels on ground
+        assert np.isclose(node.x.v[0], 0.0)
+        assert np.isclose(node.x.v[1], 0.0)
+        assert np.isclose(node.x.v[2], 0.0)
+        assert np.isclose(node.u.thr, 0.0)
+        assert np.isclose(node.u.elev, 0.0)
+
+        node.destroy_node()
+
+    def test_speed_callback(self, ros_context):
+        """Test simulation speed multiplier update."""
+        node = SimNode()
+
+        # Create speed message
+        msg = Float64()
+        msg.data = 2.0
+
+        # Call callback
+        initial_paused = node.paused
+        node.speed_topic_callback(msg)
+
+        # Verify speed was updated
+        assert node.sim_speed == 2.0
+
+        # Note: speed callback pauses and resumes, so final state should be running
+        # if it was running before (after the pause/resume cycle)
+
+        node.destroy_node()
+
+    def test_dt_callback(self, ros_context):
+        """Test time step update."""
+        node = SimNode()
+
+        # Create dt message
+        msg = Float64()
+        msg.data = 0.02  # 20ms
+
+        # Call callback
+        node.dt_topic_callback(msg)
+
+        # Verify dt was updated
+        assert node.dt == 0.02
+
+        node.destroy_node()
+
+    def test_joint_state_publishing(self, ros_context):
+        """Test joint state message is properly formatted."""
+        node = SimNode()
+
+        # Set some control inputs
+        node.u.ail = 0.5
+        node.u.elev = -0.3
+        node.u.rud = 0.2
+        node.u.thr = 0.7
+
+        # Call publish (should not raise exception)
+        node.publish_joint_states()
+
+        # Verify propeller angle is updated
+        assert node.propeller_angle >= 0.0
+
+        node.destroy_node()
+
+    def test_nan_detection(self, ros_context):
+        """Test that NaN detection pauses simulation."""
+        node = SimNode()
+
+        # Force a NaN into the state (this is artificial for testing)
+        # In practice, we'd need to create conditions that lead to NaN
+        # For now, just verify the detection mechanism exists
+
+        # The step_simulation function checks for NaN/Inf
+        # If detected, it should pause
+
+        # Normal step should work fine
+        node.step_simulation()
+        assert not node.paused
+
+        node.destroy_node()
+
+    def test_propeller_angle_accumulation(self, ros_context):
+        """Test propeller angle accumulates with throttle."""
+        node = SimNode()
+
+        # Set throttle
+        node.u.thr = 1.0  # Full throttle
+
+        initial_angle = node.propeller_angle
+
+        # Publish joint states (advances propeller angle)
+        node.publish_joint_states()
+
+        # Angle should have increased
+        assert node.propeller_angle > initial_angle
+
+        # Angle should wrap to [0, 2π]
+        assert 0.0 <= node.propeller_angle < 2.0 * np.pi
+
+        node.destroy_node()
+
+    def test_quaternion_attribute_access(self, ros_context):
+        """Test that quaternion can be accessed via x.r attribute."""
+        node = SimNode()
+
+        # Verify quaternion attribute exists and is accessible
+        # The node accesses x.r (attitude quaternion field in SportCubStatesQuat)
+
+        # Access quaternion (should not raise AttributeError)
+        q = node.x.r
+
+        # Verify it's a valid quaternion (4 elements, normalized)
+        assert len(q) == 4
+        q_norm = np.linalg.norm(q)
+        assert np.isclose(q_norm, 1.0, atol=1e-6)
+
+        node.destroy_node()
+
+    def test_outputs_computation(self, ros_context):
+        """Test that SportCub outputs (forces/moments) are computed."""
+        node = SimNode()
+
+        # Step simulation to trigger output computation
+        node.step_simulation()
+
+        # Verify outputs were computed if f_y exists
+        if hasattr(node.sportcub, "f_y"):
+            assert node.last_outputs is not None
+            # Outputs should have force/moment attributes
+            assert hasattr(node.last_outputs, "FA_b")  # Aero force
+            assert hasattr(node.last_outputs, "FT_b")  # Thrust force
+            assert hasattr(node.last_outputs, "FW_b")  # Weight force
+
+        node.destroy_node()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

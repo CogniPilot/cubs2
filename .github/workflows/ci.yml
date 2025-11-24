@@ -1,0 +1,290 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  format-check:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-formatters-${{ runner.os }}
+          restore-keys: apt-formatters-
+
+      - name: Install formatters
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y black clang-format
+
+      - name: Check Python formatting (Black)
+        run: |
+          ls -la resources/dev/ || echo "Config directory not found"
+          black --config ./resources/dev/pyproject.toml --check --diff ./fixed_wing_purt/ ./test/
+
+      - name: Check C++ formatting (clang-format)
+        run: |
+          find ./src -name "*.cpp" -o -name "*.hpp" | xargs clang-format --dry-run -Werror -style=file:./resources/dev/.clang-format
+
+  test:
+    name: ROS 2 Tests
+    runs-on: ubuntu-latest
+    container:
+      image: ros:jazzy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: src/fixed_wing_purt
+
+      - name: Clone cyecca dependency
+        run: |
+          # Clone cyecca (workspace dependency)
+          git clone https://github.com/CogniPilot/cyecca.git src/cyecca
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-ros2-${{ runner.os }}-${{ hashFiles('**/package.xml') }}
+          restore-keys: |
+            apt-ros2-${{ runner.os }}-
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: /root/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/package.xml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Cache rosdep
+        uses: actions/cache@v4
+        with:
+          path: /root/.ros/rosdep
+          key: rosdep-${{ runner.os }}-${{ hashFiles('**/package.xml') }}
+          restore-keys: |
+            rosdep-${{ runner.os }}-
+
+      - name: Setup package repositories
+        run: |
+          # Ensure all Ubuntu repositories are enabled
+          apt-get update
+          apt-get install -y software-properties-common ccache
+          
+          # Enable universe and multiverse repositories (needed for Python packages)
+          add-apt-repository -y universe
+          add-apt-repository -y multiverse
+          
+          # Refresh package lists
+          apt-get update
+
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=max_size=500M
+          ccache --set-config=compression=true
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
+
+      - name: Initialize rosdep
+        run: |
+          # Initialize rosdep
+          rosdep init || echo "rosdep already initialized"
+          rosdep update
+
+      - name: Install project dependencies
+        run: |
+          # Install all system dependencies via rosdep, skipping workspace dependencies
+          rosdep install --from-paths src --ignore-src -r -y
+
+      - name: Cache CasADi
+        id: cache-casadi
+        uses: actions/cache@v4
+        with:
+          path: /tmp/casadi.deb
+          key: casadi-3.6.3-328
+
+      - name: Download CasADi
+        if: steps.cache-casadi.outputs.cache-hit != 'true'
+        run: |
+          wget -O /tmp/casadi.deb https://github.com/CogniPilot/helmet/raw/main/install/resources/casadi-3.6.3-328.0d8030d49-Linux.deb
+
+      - name: Install CasADi
+        run: |
+          apt-get install -y /tmp/casadi.deb
+
+      - name: Cache colcon workspace
+        uses: actions/cache@v4
+        with:
+          path: |
+            build
+            install
+          key: colcon-${{ runner.os }}-${{ hashFiles('**/package.xml', '**/*.cmake', 'src/**/*.cpp', 'src/**/*.hpp', 'fixed_wing_purt/**/*.py') }}
+          restore-keys: |
+            colcon-${{ runner.os }}-
+
+      - name: Build
+        run: |
+          . /opt/ros/jazzy/setup.sh
+          colcon build --packages-up-to fixed_wing_purt --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        env:
+          CCACHE_DIR: /root/.ccache
+
+      - name: ccache statistics
+        run: ccache -s
+
+      - name: Run tests with coverage
+        run: |
+          . /opt/ros/jazzy/setup.sh
+          . install/setup.sh
+          cd src/fixed_wing_purt
+          mkdir -p test_results
+          python3 -m pytest test/ \
+            --cov=fixed_wing_purt \
+            --cov-config=resources/config/.coveragerc \
+            --cov-report=term-missing \
+            --cov-report=html:test_results/python_coverage \
+            --cov-report=xml:test_results/coverage.xml
+
+      - name: Check coverage thresholds
+        run: |
+          cd src/fixed_wing_purt
+          python3 -c "
+          import xml.etree.ElementTree as ET
+          import sys
+          
+          # Parse coverage XML
+          tree = ET.parse('test_results/coverage.xml')
+          root = tree.getroot()
+          coverage = float(root.attrib['line-rate']) * 100
+          
+          # Define thresholds
+          MIN_COVERAGE = 30.0  # Minimum overall coverage
+          TARGET_COVERAGE = 50.0  # Target coverage for warnings
+          
+          print(f'Current coverage: {coverage:.1f}%')
+          print(f'Minimum required: {MIN_COVERAGE}%')
+          print(f'Target coverage: {TARGET_COVERAGE}%')
+          
+          if coverage < MIN_COVERAGE:
+              print(f'❌ FAILURE: Coverage {coverage:.1f}% is below minimum {MIN_COVERAGE}%')
+              sys.exit(1)
+          elif coverage < TARGET_COVERAGE:
+              print(f'⚠️  WARNING: Coverage {coverage:.1f}% is below target {TARGET_COVERAGE}%')
+              print('Consider adding more tests to improve coverage.')
+          else:
+              print(f'✅ SUCCESS: Coverage {coverage:.1f}% meets target!')
+          "
+
+      - name: Generate coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd src/fixed_wing_purt
+          python3 -c "
+          import xml.etree.ElementTree as ET
+          import json
+          import os
+          try:
+              tree = ET.parse('test_results/coverage.xml')
+              root = tree.getroot()
+              coverage = float(root.attrib['line-rate']) * 100
+              color = 'red' if coverage < 30 else 'orange' if coverage < 60 else 'green'
+              
+              # Create badge JSON for shields.io endpoint schema
+              badge_data = {
+                  'schemaVersion': 1,
+                  'label': 'coverage',
+                  'message': f'{coverage:.1f}%',
+                  'color': color
+              }
+              
+              # Write to artifacts
+              with open('test_results/coverage-badge.json', 'w') as f:
+                  json.dump(badge_data, f)
+              
+              # Write coverage percentage for GitHub Actions summary
+              print(f'Coverage: {coverage:.1f}%')
+              
+              # Set GitHub Actions output for use in badge
+              with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+                  f.write(f'coverage={coverage:.1f}\\n')
+                  f.write(f'color={color}\\n')
+                  
+          except Exception as e:
+              print(f'Coverage badge generation failed: {e}')
+              with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+                  f.write('coverage=unknown\\n')
+                  f.write('color=lightgrey\\n')
+          "
+        continue-on-error: true
+        id: coverage
+
+      - name: Coverage summary
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd src/fixed_wing_purt
+          python3 -c "
+          import xml.etree.ElementTree as ET
+          
+          # Parse coverage XML and create detailed summary
+          tree = ET.parse('test_results/coverage.xml')
+          root = tree.getroot()
+          
+          # Overall stats
+          total_lines = int(root.attrib['lines-valid'])
+          covered_lines = int(root.attrib['lines-covered'])
+          coverage = float(root.attrib['line-rate']) * 100
+          
+          print('## Coverage Summary')
+          print(f'- **Overall Coverage:** {coverage:.1f}% ({covered_lines}/{total_lines} lines)')
+          
+          # Per-package breakdown
+          packages = root.findall('.//package')
+          if packages:
+              print('- **Package Breakdown:**')
+              for pkg in packages:
+                  pkg_name = pkg.attrib['name']
+                  pkg_coverage = float(pkg.attrib['line-rate']) * 100
+                  if pkg_name == '.':
+                      continue
+                  print(f'  - {pkg_name}: {pkg_coverage:.1f}%')
+          
+          print(f'- **Status:** {'✅ PASS' if coverage >= 30 else '❌ FAIL'} (minimum 30%)')
+          " >> \$GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-data
+          path: |
+            src/fixed_wing_purt/test_results/coverage.xml
+            src/fixed_wing_purt/test_results/coverage-badge.json
+            src/fixed_wing_purt/test_results/python_coverage/
+          retention-days: 30
+        continue-on-error: true
+
+      - name: Run ROS tests
+        run: |
+          . /opt/ros/jazzy/setup.sh
+          . install/setup.sh
+          colcon test --packages-select fixed_wing_purt --event-handlers console_direct+
+
+      - name: Check test results
+        run: |
+          colcon test-result --verbose

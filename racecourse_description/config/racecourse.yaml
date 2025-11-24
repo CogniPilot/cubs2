@@ -1,0 +1,99 @@
+frame_id: "map"
+
+meshes:
+  gate:  "package://fixed_wing_purt/resources/meshes/gate.glb"
+
+rules:
+  max_altitude: 10.0
+
+
+# ----------------------------------------------------------------------
+# GATES (semantic elements for planning + visualization)
+# ----------------------------------------------------------------------
+gates:
+
+  - name: "gate_0"
+    center: [0.0, 0.0, 0.0]
+    yaw: -30.0
+    width: 2.0
+
+  - name: "gate_1"
+    center: [13.0, -7.0, 2.0]
+    yaw: 0.0
+    width: 2.0
+
+  - name: "gate_2"
+    center: [13.0, 7.0, 2.0]
+    yaw: 180.0
+    width: 2.0
+
+  - name: "gate_3"
+    center: [-13.0, 7.0, 2.0]
+    yaw: 0.0
+    width: 2.0
+
+  - name: "gate_4"
+    center: [-13.0, -7.0, 2.0]
+    yaw: 180.0
+    width: 2.0
+
+# ----------------------------------------------------------------------
+# GENERIC VISUAL MODELS (visual dressing only — pylons, arches, props)
+# ----------------------------------------------------------------------
+generic:
+  
+  - name: "wall0"
+    mesh: "package://fixed_wing_purt/resources/meshes/cube.glb"
+    position: [0.0, -15.0, 0.0]
+    color: [1.0, 1.0, 1.0]
+    scale: [54.0, 0.01, 2.0]
+    alpha: 0.1
+
+  - name: "wall1"
+    mesh: "package://fixed_wing_purt/resources/meshes/cube.glb"
+    position: [0.0, 15.0, 0.0]
+    color: [1.0, 1.0, 1.0]
+    scale: [54.0, 0.01, 2.0]
+    alpha: 0.1
+
+  - name: "wall2"
+    mesh: "package://fixed_wing_purt/resources/meshes/cube.glb"
+    position: [-27.0, 0.0, 0.0]
+    rpy: [0.0, 0.0, 90.0]
+    color: [1.0, 1.0, 1.0]
+    scale: [30.0, 0.01, 2.0]
+    alpha: 0.1
+
+  - name: "wall3"
+    mesh: "package://fixed_wing_purt/resources/meshes/cube.glb"
+    position: [27.0, 0.0, 0.0]
+    rpy: [0.0, 0.0, 90.0]
+    color: [1.0, 1.0, 1.0]
+    scale: [30.0, 0.01, 2.0]
+    alpha: 0.1
+
+  - name: "floor"
+    mesh: "package://fixed_wing_purt/resources/meshes/concrete_floor.glb"
+    position: [0.0, 0.0, -0.02]
+    rpy: [90.0, 0.0, 0.0]
+    color: [0.4, 0.4, 0.4]
+    scale: [0.21, 1.0, 0.118]
+    alpha: 1.0
+
+  - name: "plane_landed_1"
+    mesh: "package://fixed_wing_purt/resources/meshes/plane.glb"
+    position: [2.0, -4.0, 0.01]
+    scale: [1.0, 1.0, 1.0]
+    rpy: [0.0, 0.0, 75.0]  
+
+  - name: "plane_landed_2"
+    mesh: "package://fixed_wing_purt/resources/meshes/plane.glb"
+    position: [1.0, 2.0, 0.01]
+    scale: [1.0, 1.0, 1.0]
+    rpy: [0.0, 0.0, 45.0]
+  
+  - name: "desk_and_pc"
+    mesh: "package://fixed_wing_purt/resources/meshes/desk_and_pc.glb"
+    position: [0.0, 14.0, 0.01]
+    scale: [0.3, 0.3, 0.3]
+    rpy: [90.0, 0.0, 90.0]

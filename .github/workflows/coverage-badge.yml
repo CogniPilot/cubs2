@@ -1,0 +1,84 @@
+name: Update Coverage Badge
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  update-badge:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Download coverage artifact
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let allArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: context.payload.workflow_run.id,
+            });
+            
+            let matchArtifact = allArtifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "coverage-data"
+            })[0];
+            
+            if (matchArtifact) {
+              let download = await github.rest.actions.downloadArtifact({
+                 owner: context.repo.owner,
+                 repo: context.repo.repo,
+                 artifact_id: matchArtifact.id,
+                 archive_format: 'zip',
+              });
+              
+              let fs = require('fs');
+              fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/coverage-data.zip`, Buffer.from(download.data));
+            }
+            
+      - name: Extract coverage data
+        run: |
+          if [ -f coverage-data.zip ]; then
+            unzip coverage-data.zip
+            if [ -f coverage-badge.json ]; then
+              echo "Coverage badge data found"
+              cat coverage-badge.json
+            fi
+          fi
+
+      - name: Create coverage badge
+        run: |
+          if [ -f coverage-badge.json ]; then
+            # Copy the coverage badge to the badges directory
+            mkdir -p .github/badges
+            cp coverage-badge.json .github/badges/coverage.json
+            
+            # Show what was created
+            COVERAGE=$(python3 -c "import json; print(json.load(open('coverage-badge.json'))['message'])")
+            COLOR=$(python3 -c "import json; print(json.load(open('coverage-badge.json'))['color'])")
+            echo "Created coverage badge: $COVERAGE ($COLOR)"
+          else
+            echo "No coverage data found, creating fallback badge"
+            mkdir -p .github/badges
+            echo '{"schemaVersion":1,"label":"coverage","message":"unknown","color":"lightgrey"}' > .github/badges/coverage.json
+          fi
+
+      - name: Commit badge
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .github/badges/coverage.json
+          if git diff --cached --exit-code; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update coverage badge [skip ci]"
+            git push
+          fi

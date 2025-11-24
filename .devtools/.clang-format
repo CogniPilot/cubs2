@@ -1,0 +1,17 @@
+# ROS 2-style clang-format configuration (approximate)
+BasedOnStyle: Google
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 100
+DerivePointerAlignment: false
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+AccessModifierOffset: -2
+BreakBeforeBraces: Attach
+SpacesInAngles: false
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+Standard: Latest
+SortIncludes: true
+IncludeBlocks: Preserve

@@ -1,0 +1,135 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="plane">
+
+  <!-- Declare arguments -->
+  <xacro:arg name="frame_id" default="reference"/>
+  <xacro:arg name="show_forces" default="false"/>
+
+  <!-- Macro must use params (receives frame_id inside macro) -->
+  <xacro:macro name="plane_model" params="frame_id show_forces">
+
+    <link name="${frame_id}">
+      <visual>
+        <origin xyz="0 0 -0.1" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://fixed_wing_purt/resources/meshes/plane.glb"
+                scale="1.0 1.0 1.0"/>
+        </geometry>
+      </visual>
+    </link>
+
+    <!-- Propeller joint (continuous rotation) - DISABLED -->
+    <!--
+    <joint name="propeller_joint" type="continuous">
+      <parent link="${frame_id}"/>
+      <child link="propeller"/>
+      <origin xyz="0.09 0.0 0.06" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+    </joint>
+    
+    <link name="propeller">
+      <visual>
+        <geometry>
+          <box size="0.004 0.08 0.005"/>
+        </geometry>
+        <material name="propeller_material">
+          <color rgba="0.9 0.9 0.9 0.8"/>
+        </material>
+      </visual>
+    </link>
+    -->
+
+    <!-- Left aileron joint - DISABLED -->
+    <!--
+    <joint name="left_aileron_joint" type="revolute">
+      <parent link="${frame_id}"/>
+      <child link="left_aileron"/>
+      <origin xyz="-0.08 -0.17 0.09" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-0.5" upper="0.5" effort="0" velocity="10"/>
+    </joint>
+    
+    <link name="left_aileron">
+      <visual>
+        <geometry>
+          <box size="0.03 0.14 0.004"/>
+        </geometry>
+        <material name="control_surface_material">
+          <color rgba="0.9 0.9 0.9 0.8"/>
+        </material>
+      </visual>
+    </link>
+    -->
+
+    <!-- Right aileron joint - DISABLED -->
+    <!--
+    <joint name="right_aileron_joint" type="revolute">
+      <parent link="${frame_id}"/>
+      <child link="right_aileron"/>
+      <origin xyz="-0.08 0.17 0.09" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-0.5" upper="0.5" effort="0" velocity="10"/>
+    </joint>
+    
+    <link name="right_aileron">
+      <visual>
+        <geometry>
+          <box size="0.03 0.14 0.004"/>
+        </geometry>
+        <material name="control_surface_material">
+          <color rgba="0.9 0.9 0.9 0.8"/>
+        </material>
+      </visual>
+    </link>
+    -->
+
+    <!-- Elevator joint - DISABLED -->
+    <!--
+    <joint name="elevator_joint" type="revolute">
+      <parent link="${frame_id}"/>
+      <child link="elevator"/>
+      <origin xyz="-0.25 0.0 0.065" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-0.5" upper="0.5" effort="0" velocity="10"/>
+    </joint>
+    
+    <link name="elevator">
+      <visual>
+        <geometry>
+          <box size="0.03 0.16 0.004"/>
+        </geometry>
+        <material name="control_surface_material">
+          <color rgba="0.9 0.9 0.9 0.8"/>
+        </material>
+      </visual>
+    </link>
+    -->
+
+    <!-- Rudder joint - DISABLED -->
+    <!--
+    <joint name="rudder_joint" type="revolute">
+      <parent link="${frame_id}"/>
+      <child link="rudder"/>
+      <origin xyz="-0.28 0.0 0.09" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-0.5" upper="0.5" effort="0" velocity="10"/>
+    </joint>
+    
+    <link name="rudder">
+      <visual>
+        <geometry>
+          <box size="0.03 0.004 0.08"/>
+        </geometry>
+        <material name="control_surface_material">
+          <color rgba="0.9 0.9 0.9 0.8"/>
+        </material>
+      </visual>
+    </link>
+    -->
+
+  </xacro:macro>
+
+  <!-- Instantiate macro using the *name* of the arg -->
+  <xacro:plane_model frame_id="$(arg frame_id)" show_forces="$(arg show_forces)"/>
+
+</robot>

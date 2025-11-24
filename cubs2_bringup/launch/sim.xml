@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<launch>
+
+    <!-- Enable/disable different planes -->
+    <arg name="enable_replay" default="false"/>  <!-- Recorded flight for comparison -->
+    <arg name="enable_sim" default="true"/>     <!-- Live simulation -->
+    <arg name="bag_path" default="$(find-pkg-share cubs2_data)/data/cub_stabilize_2025-10-21.mcap"/>
+    <arg name="rate" default="1.0"/>
+    <arg name="plane_urdf" default="$(find-pkg-share cubs2_description)/urdf/sportcub.urdf.xacro"/>
+    
+    <!-- Simulation and planner args -->
+    <arg name="gate_sequence" default="[0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]"/>
+    <arg name="show_forces" default="true"/>
+
+    <!-- Replay: recorded flight from rosbag (ghost plane for comparison) -->
+    <executable cmd="ros2 bag play $(var bag_path) --rate $(var rate) --loop" output="screen" if="$(var enable_replay)"/>
+
+    <!-- Replay: pose to TF broadcaster -->
+    <node pkg="cubs2_simulation" exec="pose_to_tf.py" name="replay_pose_to_tf" output="screen" if="$(var enable_replay)">
+        <param name="use_sim_time" value="false"/>
+        <remap from="pose" to="/cub1/pose"/>
+        <param name="frame_id" value="map"/>
+        <param name="child_frame_id" value="replay"/>
+    </node>
+
+    <!-- Replay: plane visualization -->
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="replay" output="screen" if="$(var enable_replay)">
+        <remap from="robot_description" to="/replay/description"/>
+        <param name="robot_description"
+               value="$(command 'xacro $(var plane_urdf) frame_id:=replay')"/>
+        <param name="use_sim_time" value="false"/>
+        <param name="publish_frequency" value="50.0"/>
+    </node>
+
+    <!-- Vehicle: live simulation node -->
+    <node pkg="cubs2_simulation" exec="sim.py" output="screen" if="$(var enable_sim)">
+        <param name="use_sim_time" value="false"/>
+        <param name="show_forces" value="$(var show_forces)"/>
+    </node>
+
+    <!-- Vehicle: plane visualization -->
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="vehicle" output="screen" if="$(var enable_sim)">
+        <remap from="robot_description" to="/vehicle/description"/>
+        <param name="robot_description"
+               value="$(command 'xacro $(var plane_urdf) frame_id:=vehicle show_forces:=$(var show_forces)')"/>
+        <param name="use_sim_time" value="false"/>
+        <param name="publish_frequency" value="50.0"/>
+    </node>
+
+    <!-- Planner -->
+    <node pkg="cubs2_planning" exec="planner_dubins.py"
+            name="dubins_planner" output="screen">
+        <param name="use_sim_time" value="false"/>
+        <param name="gate_sequence" value="$(var gate_sequence)"/>
+    </node>
+
+    <!-- Reference plane visualization for planner -->
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="reference" output="screen">
+        <remap from="robot_description" to="/reference/description"/>
+        <param name="robot_description"
+               value="$(command 'xacro $(var plane_urdf) frame_id:=reference')"/>
+        <param name="use_sim_time" value="false"/>
+        <param name="publish_frequency" value="50.0"/>
+    </node>
+
+</launch>

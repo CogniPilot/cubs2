@@ -1,0 +1,50 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist/
+build/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+test_results/
+coverage.xml
+.tox/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDEs
+.vscode
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# ROS 2
+install/
+log/
+build/
+
+# Temporary files
+*.tmp
+*.bak
+.DS_Store
+
+.venv-docs/
+
+*.mcap
