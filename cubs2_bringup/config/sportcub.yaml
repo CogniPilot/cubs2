@@ -1,0 +1,53 @@
+# SportCub configuration
+# Central configuration for all SportCub-related parameters across multiple nodes
+
+/**:
+  ros__parameters:
+    # Controller parameters
+    controller:
+      # Trim offsets (radians) - for hands-off flight at cruise
+      # Adjust these after finding trim condition to compensate for:
+      # - Propeller P-factor and torque
+      # - CG offset
+      # - Asymmetries
+      trim:
+        aileron: 0.0    # Roll trim (rad), positive = right wing down
+        elevator: 0.0   # Pitch trim (rad), positive = nose down
+        rudder: 0.0     # Yaw trim (rad), positive = nose right
+
+      # Autolevel controller gains
+      autolevel:
+        # Outer loop: angle control
+        Kp_phi: 2.5      # Roll angle P gain (1.5-4.0)
+        Kp_theta: 2.0    # Pitch angle P gain (1.5-4.0)
+
+        # Inner loop: rate damping
+        Kp_p: 0.6        # Roll rate P gain (0.4-0.8)
+        Ki_p: 0.0        # Roll rate I gain
+        Kp_q: 0.6        # Pitch rate P gain
+        Ki_q: 0.0        # Pitch rate I gain
+        Kp_r: 0.3        # Yaw rate damping
+
+        # Speed control
+        Kp_speed: 0.7    # Speed P gain
+        speed_ref: 20.0  # Reference speed (m/s)
+
+        # Stick-to-attitude mapping (stabilized mode)
+        stick_to_phi: 0.785    # ±45° at full stick (rad)
+        stick_to_theta: 0.349  # ±20° at full stick (rad)
+
+    # Simulation parameters
+    simulation:
+      dt: 0.01           # Timestep (s)
+      show_forces: true  # Visualize forces/moments in RViz
+
+    # Replay parameters
+    replay:
+      rate: 1.0          # Playback speed multiplier
+
+    # Planning parameters
+    planner:
+      gate_sequence: [0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]
+      velocity: 5.0           # m/s - velocity along trajectory
+      altitude: 2.0           # m - flight altitude
+      heading_spacing: 20     # degrees between heading samples

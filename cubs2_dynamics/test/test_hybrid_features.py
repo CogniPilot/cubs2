@@ -9,7 +9,7 @@ A bouncing ball is a classic hybrid dynamical system with:
 import casadi as ca
 import numpy as np
 import pytest
-from cubs2_dynamics.model import ModelSX, input_var, param, state, symbolic
+from cyecca.dynamics import ModelSX, input_var, param, state, symbolic
 
 
 @pytest.fixture

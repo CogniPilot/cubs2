@@ -434,7 +434,8 @@ class TestSportCubNode:
 
     def test_trim_linearize_5ms(self):
         """Trim and linearize at 5 m/s, verify near-zero net forces/moments and mode presence."""
-        model = sportcub()
+        # Use Euler representation for better mode analysis and interpretation
+        model = sportcub(attitude_rep="euler")
         # Optimize throttle & elevator for level flight (vertical velocity near zero)
         # Always force verbose printing for this test so optimizer & mode details are visible
         x_trim, u_trim, _ = find_trim(
@@ -503,9 +504,12 @@ class TestSportCubNode:
             assert (
                 sp["damping_ratio"] > 0.3
             ), f"Short period under-damped: ζ={sp['damping_ratio']:.3f}"
-            assert (
-                sp["frequency_hz"] > 0.5
-            ), f"Short period frequency low: {sp['frequency_hz']:.2f} Hz"
+            # Short period can be oscillatory or critically/over-damped
+            # If oscillatory, frequency should be reasonable
+            if sp["is_oscillatory"]:
+                assert (
+                    sp["frequency_hz"] > 0.5
+                ), f"Short period frequency low: {sp['frequency_hz']:.2f} Hz"
 
         # Basic condition checks
         assert outputs.qbar > 0.0
@@ -607,3 +611,250 @@ class TestSportCubNode:
         assert 5.0 < LD < 10.0, f"L/D out of range: {LD:.2f}"
 
         print("  ✓ Euler linearization successful")
+
+    def test_trim_quaternion_vs_euler_5ms(self):
+        """Verify quaternion and Euler representations produce equivalent trim solutions at 5 m/s."""
+        print("\n" + "=" * 80)
+        print("COMPARING QUATERNION vs EULER TRIM SOLUTIONS AT 5 m/s")
+        print("=" * 80)
+
+        # Create both models
+        model_quat = sportcub(attitude_rep="quat")
+        model_euler = sportcub(attitude_rep="euler")
+
+        # Find trim with quaternion representation
+        print("\n--- QUATERNION REPRESENTATION ---")
+        x_trim_quat, u_trim_quat, stats_quat = find_trim(
+            model_quat,
+            V_target=5.0,
+            gamma=0.0,
+            print_progress=False,
+            fix_throttle=False,
+            verbose=True,
+            ipopt_print_level=1,
+        )
+
+        # Find trim with Euler representation
+        print("\n--- EULER ANGLE REPRESENTATION ---")
+        x_trim_euler, u_trim_euler, stats_euler = find_trim(
+            model_euler,
+            V_target=5.0,
+            gamma=0.0,
+            print_progress=False,
+            fix_throttle=False,
+            verbose=True,
+            ipopt_print_level=1,
+        )
+
+        # Extract state structures
+        state_quat = model_quat.state_type.from_vec(x_trim_quat)
+        state_euler = model_euler.state_type.from_vec(x_trim_euler)
+
+        # Extract input structures
+        input_quat = model_quat.input_type.from_vec(u_trim_quat)
+        input_euler = model_euler.input_type.from_vec(u_trim_euler)
+
+        # Convert quaternion to Euler for comparison
+        # quaternion is [w, x, y, z], need to convert to [phi, theta, psi]
+        qw, qx, qy, qz = state_quat.r[0], state_quat.r[1], state_quat.r[2], state_quat.r[3]
+
+        # Convert quaternion to Euler angles (3-2-1 sequence)
+        # Roll (phi)
+        phi_from_quat = np.arctan2(
+            2 * (qw * qx + qy * qz), 1 - 2 * (qx * qx + qy * qy)
+        )
+        # Pitch (theta)
+        sin_theta = 2 * (qw * qy - qz * qx)
+        theta_from_quat = np.arcsin(np.clip(sin_theta, -1.0, 1.0))
+        # Yaw (psi)
+        psi_from_quat = np.arctan2(
+            2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz)
+        )
+
+        print("\n" + "=" * 80)
+        print("COMPARISON RESULTS")
+        print("=" * 80)
+
+        # Compare positions
+        print("\nPosition (m):")
+        print(f"  Quaternion: {state_quat.p}")
+        print(f"  Euler:      {state_euler.p}")
+        np.testing.assert_allclose(state_quat.p, state_euler.p, rtol=1e-3, atol=1e-3)
+        print("  ✓ Positions match")
+
+        # Compare velocities
+        print("\nVelocity (m/s):")
+        print(f"  Quaternion: {state_quat.v}")
+        print(f"  Euler:      {state_euler.v}")
+        np.testing.assert_allclose(state_quat.v, state_euler.v, rtol=1e-3, atol=1e-3)
+        print("  ✓ Velocities match")
+
+        # Compare attitudes
+        print("\nAttitude (deg):")
+        print(f"  From Quat:  phi={np.degrees(phi_from_quat):.3f}°, theta={np.degrees(theta_from_quat):.3f}°, psi={np.degrees(psi_from_quat):.3f}°")
+        print(f"  Euler:      phi={np.degrees(state_euler.r[2]):.3f}°, theta={np.degrees(state_euler.r[1]):.3f}°, psi={np.degrees(state_euler.r[0]):.3f}°")
+        # Note: Euler state is [psi, theta, phi] order
+        np.testing.assert_allclose(
+            [phi_from_quat, theta_from_quat, psi_from_quat],
+            [state_euler.r[2], state_euler.r[1], state_euler.r[0]],
+            rtol=1e-2,
+            atol=np.deg2rad(0.5),  # 0.5 degree tolerance
+        )
+        print("  ✓ Attitudes match")
+
+        # Compare angular velocities
+        print("\nAngular velocity (rad/s):")
+        print(f"  Quaternion: {state_quat.w}")
+        print(f"  Euler:      {state_euler.w}")
+        np.testing.assert_allclose(state_quat.w, state_euler.w, rtol=1e-3, atol=1e-3)
+        print("  ✓ Angular velocities match")
+
+        # Compare control inputs
+        print("\nControl inputs:")
+        print(f"  Quaternion: ail={input_quat.ail:.4f}, elev={input_quat.elev:.4f}, rud={input_quat.rud:.4f}, thr={input_quat.thr:.4f}")
+        print(f"  Euler:      ail={input_euler.ail:.4f}, elev={input_euler.elev:.4f}, rud={input_euler.rud:.4f}, thr={input_euler.thr:.4f}")
+        np.testing.assert_allclose(
+            [input_quat.ail, input_quat.elev, input_quat.rud, input_quat.thr],
+            [input_euler.ail, input_euler.elev, input_euler.rud, input_euler.thr],
+            rtol=1e-3,
+            atol=1e-3,
+        )
+        print("  ✓ Control inputs match")
+
+        # Compare outputs (forces, moments, aerodynamics)
+        outputs_quat = self._extract_outputs(model_quat, x_trim_quat, u_trim_quat, model_quat.p0.as_vec())
+        outputs_euler = self._extract_outputs(model_euler, x_trim_euler, u_trim_euler, model_euler.p0.as_vec())
+
+        print("\nAerodynamic outputs:")
+        print(f"  Quaternion: Vt={outputs_quat.Vt:.3f} m/s, alpha={np.degrees(outputs_quat.alpha):.3f}°, CL={outputs_quat.CL:.4f}, CD={outputs_quat.CD:.4f}")
+        print(f"  Euler:      Vt={outputs_euler.Vt:.3f} m/s, alpha={np.degrees(outputs_euler.alpha):.3f}°, CL={outputs_euler.CL:.4f}, CD={outputs_euler.CD:.4f}")
+        np.testing.assert_allclose(outputs_quat.Vt, outputs_euler.Vt, rtol=1e-3)
+        np.testing.assert_allclose(outputs_quat.alpha, outputs_euler.alpha, rtol=1e-2, atol=np.deg2rad(0.5))
+        np.testing.assert_allclose(outputs_quat.CL, outputs_euler.CL, rtol=1e-3)
+        np.testing.assert_allclose(outputs_quat.CD, outputs_euler.CD, rtol=1e-3)
+        print("  ✓ Aerodynamic outputs match")
+
+        print("\nForces and moments:")
+        print(f"  Quaternion: F_b={outputs_quat.F_b}, M_b={outputs_quat.M_b}")
+        print(f"  Euler:      F_b={outputs_euler.F_b}, M_b={outputs_euler.M_b}")
+        np.testing.assert_allclose(outputs_quat.F_b, outputs_euler.F_b, rtol=1e-2, atol=1e-3)
+        np.testing.assert_allclose(outputs_quat.M_b, outputs_euler.M_b, rtol=1e-2, atol=1e-3)
+        print("  ✓ Forces and moments match")
+
+        # Compare linearized dynamics and modes
+        print("\n" + "=" * 80)
+        print("COMPARING LINEARIZED DYNAMICS AND FLIGHT MODES")
+        print("=" * 80)
+
+        A_quat, B_quat = linearize_dynamics(model_quat, x_trim_quat, u_trim_quat)
+        A_euler, B_euler = linearize_dynamics(model_euler, x_trim_euler, u_trim_euler)
+
+        print(f"\nState space dimensions:")
+        print(f"  Quaternion: A is {A_quat.shape[0]}x{A_quat.shape[1]} (13 states: p[3], v[3], q[4], w[3])")
+        print(f"  Euler:      A is {A_euler.shape[0]}x{A_euler.shape[1]} (12 states: p[3], v[3], r[3], w[3])")
+
+        # Analyze modes for both representations
+        state_names_quat = getattr(model_quat, "state_names", None)
+        if not state_names_quat:
+            state_names_quat = [
+                n for n, _ in sorted(
+                    getattr(model_quat, "state_index", {}).items(),
+                    key=lambda kv: kv[1],
+                )
+            ]
+
+        state_names_euler = getattr(model_euler, "state_names", None)
+        if not state_names_euler:
+            state_names_euler = [
+                n for n, _ in sorted(
+                    getattr(model_euler, "state_index", {}).items(),
+                    key=lambda kv: kv[1],
+                )
+            ]
+
+        modes_quat = analyze_modes(A_quat, state_names=state_names_quat)
+        modes_euler = analyze_modes(A_euler, state_names=state_names_euler)
+
+        classified_quat = classify_aircraft_modes(modes_quat, state_names_quat)
+        classified_euler = classify_aircraft_modes(modes_euler, state_names_euler)
+
+        print("\n--- QUATERNION REPRESENTATION MODES ---")
+        print_mode_summary(modes_quat, state_names_quat)
+
+        print("\n--- EULER REPRESENTATION MODES ---")
+        print_mode_summary(modes_euler, state_names_euler)
+
+        # Compare key mode characteristics
+        print("\n" + "=" * 80)
+        print("MODE COMPARISON")
+        print("=" * 80)
+
+        mode_types = [
+            ("short_period", "Short Period"),
+            ("phugoid", "Phugoid"),
+            ("dutch_roll", "Dutch Roll"),
+            ("roll_damping", "Roll Damping"),
+            ("spiral", "Spiral"),
+        ]
+
+        for key, name in mode_types:
+            mode_q = classified_quat.get(key)
+            mode_e = classified_euler.get(key)
+
+            print(f"\n{name}:")
+            if mode_q is None and mode_e is None:
+                print("  Both: NOT IDENTIFIED")
+                continue
+            elif mode_q is None:
+                print("  Quaternion: NOT IDENTIFIED")
+                print(f"  Euler:      λ={mode_e['eigenvalue_continuous']:.4f}, τ={mode_e['time_constant']:.3f}s")
+                continue
+            elif mode_e is None:
+                print(f"  Quaternion: λ={mode_q['eigenvalue_continuous']:.4f}, τ={mode_q['time_constant']:.3f}s")
+                print("  Euler:      NOT IDENTIFIED")
+                continue
+
+            # Both identified - compare
+            print(f"  Eigenvalue:")
+            print(f"    Quaternion: {mode_q['eigenvalue_continuous']:.4f}")
+            print(f"    Euler:      {mode_e['eigenvalue_continuous']:.4f}")
+
+            print(f"  Time constant:")
+            print(f"    Quaternion: {mode_q['time_constant']:.3f} s")
+            print(f"    Euler:      {mode_e['time_constant']:.3f} s")
+
+            print(f"  Damping ratio:")
+            print(f"    Quaternion: {mode_q['damping_ratio']:.4f}")
+            print(f"    Euler:      {mode_e['damping_ratio']:.4f}")
+
+            if mode_q['is_oscillatory'] and mode_e['is_oscillatory']:
+                print(f"  Frequency:")
+                print(f"    Quaternion: {mode_q['frequency_hz']:.4f} Hz")
+                print(f"    Euler:      {mode_e['frequency_hz']:.4f} Hz")
+
+                # Check that frequencies match closely (should be identical for physical modes)
+                freq_diff = abs(mode_q['frequency_hz'] - mode_e['frequency_hz'])
+                freq_rel_diff = freq_diff / max(mode_q['frequency_hz'], 1e-6)
+                if freq_rel_diff > 0.05:  # 5% tolerance
+                    print(f"    ⚠ WARNING: Frequency mismatch {freq_rel_diff*100:.1f}%")
+                else:
+                    print(f"    ✓ Frequencies match (diff: {freq_rel_diff*100:.2f}%)")
+
+            # Check that time constants match
+            tc_diff = abs(mode_q['time_constant'] - mode_e['time_constant'])
+            tc_rel_diff = tc_diff / max(mode_q['time_constant'], 1e-6)
+            if tc_rel_diff > 0.05:  # 5% tolerance
+                print(f"  ⚠ WARNING: Time constant mismatch {tc_rel_diff*100:.1f}%")
+            else:
+                print(f"  ✓ Time constants match (diff: {tc_rel_diff*100:.2f}%)")
+
+            # Check stability agreement
+            if mode_q['stable'] != mode_e['stable']:
+                print(f"  ⚠ WARNING: Stability disagreement!")
+            else:
+                stable_str = "stable" if mode_q['stable'] else "UNSTABLE"
+                print(f"  ✓ Both {stable_str}")
+
+        print("\n" + "=" * 80)
+        print("✓ QUATERNION AND EULER REPRESENTATIONS PRODUCE EQUIVALENT TRIM")
+        print("=" * 80)

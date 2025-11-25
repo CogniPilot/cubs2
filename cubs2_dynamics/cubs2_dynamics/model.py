@@ -1713,8 +1713,51 @@ class ModelSX(Generic[TState, TInput, TParam]):
                 field_size = field_val.shape[0] if hasattr(field_val, "shape") else 1
                 parent_y_dict[field_obj.name] = ca.DM.zeros(field_size, 1)
 
-            # Evaluate each submodel's output and extract connected fields
-            for source_model, connections in self._output_connections.items():
+            # Build dependency graph for topological sorting
+            # Find which submodels depend on outputs from other submodels
+            output_dependencies = {}  # submodel -> set of submodels it depends on
+            for source_model in self._submodels.keys():
+                deps = set()
+                input_conns = self._input_connections.get(source_model, {})
+                for full_path, source in input_conns.items():
+                    if "." in source:
+                        parts = source.split(".", 2)
+                        if len(parts) >= 2 and parts[1] == "y":
+                            # This submodel depends on another submodel's output
+                            deps.add(parts[0])
+                output_dependencies[source_model] = deps
+
+            # Topological sort to get evaluation order
+            def topological_sort(dependencies):
+                """Return list of nodes in topological order."""
+                result = []
+                visited = set()
+                temp_mark = set()
+
+                def visit(node):
+                    if node in temp_mark:
+                        raise ValueError(f"Circular dependency detected involving {node}")
+                    if node not in visited:
+                        temp_mark.add(node)
+                        for dep in dependencies.get(node, set()):
+                            visit(dep)
+                        temp_mark.remove(node)
+                        visited.add(node)
+                        result.append(node)
+
+                for node in dependencies.keys():
+                    if node not in visited:
+                        visit(node)
+                return result
+
+            eval_order = topological_sort(output_dependencies)
+
+            # Store submodel outputs for use in connections
+            submodel_outputs = {}  # submodel_name -> output_vector
+
+            # Evaluate each submodel's output in dependency order
+            for source_model in eval_order:
+                connections = self._output_connections.get(source_model, {})
                 submodel = self._submodels.get(source_model)
                 if submodel is None or not hasattr(submodel, "f_y"):
                     continue
@@ -1782,6 +1825,33 @@ class ModelSX(Generic[TState, TInput, TParam]):
                                             offset += fld_size
                                     else:
                                         u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                                elif src_type == "y":
+                                    # Output connection - extract from previously computed submodel output
+                                    if src_model in submodel_outputs:
+                                        src_y_vec = submodel_outputs[src_model]
+                                        src_submodel = self._submodels[src_model]
+
+                                        offset = 0
+                                        for fld in fields(src_submodel.y):
+                                            if fld.name == src_field:
+                                                fld_val = getattr(src_submodel.y, fld.name)
+                                                fld_size = (
+                                                    fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                                )
+                                                u_sub_dict[field_name] = src_y_vec[
+                                                    offset : offset + fld_size
+                                                ]
+                                                break
+                                            else:
+                                                fld_val = getattr(src_submodel.y, fld.name)
+                                                fld_size = (
+                                                    fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                                )
+                                                offset += fld_size
+                                        else:
+                                            u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                                    else:
+                                        u_sub_dict[field_name] = getattr(submodel.u0, field_name)
                                 else:
                                     u_sub_dict[field_name] = getattr(submodel.u0, field_name)
                         else:
@@ -1798,6 +1868,9 @@ class ModelSX(Generic[TState, TInput, TParam]):
 
                 # Evaluate submodel output
                 y_sub_vec = submodel.f_y(x_sub, u_sub, p_sub)
+
+                # Store output for use by other submodels
+                submodel_outputs[source_model] = y_sub_vec
 
                 # Extract fields and assign to parent output
                 for source_str, target_str in connections.items():
@@ -1860,37 +1933,42 @@ class ModelSX(Generic[TState, TInput, TParam]):
 
         # Create a structured initial state that provides field access to submodel states
         # This allows sim.py to access states like: x.plant.p, x.controller.i_p, etc.
-        from types import SimpleNamespace
+        from dataclasses import make_dataclass, field as dc_field
 
-        self.x0 = SimpleNamespace()
+        # Build fields list for the composite dataclass
+        composite_fields = []
         for name, submodel in self._submodels.items():
-            setattr(self.x0, name, copy.deepcopy(submodel.x0))
+            # Each field holds a copy of the submodel's state dataclass
+            composite_fields.append((name, type(submodel.x0), dc_field(default_factory=lambda sm=submodel: copy.deepcopy(sm.x0))))
 
-        # Also create a helper to convert between structured and vector forms
-        self._state_to_vec = lambda x_struct: ca.vertcat(
-            *[getattr(x_struct, name).as_vec() for name in self._submodels.keys()]
-        )
+        # Create composite state dataclass with as_vec() and from_vec() methods
+        def _as_vec(self_state):
+            """Convert structured state to flat vector."""
+            return ca.vertcat(*[getattr(self_state, name).as_vec() for name in self._submodels.keys()])
 
-        def _vec_to_state(x_vec):
-            """Convert vector state back to structured form."""
-            x_struct = SimpleNamespace()
+        def _from_vec(cls, x_vec):
+            """Convert flat vector to structured state."""
+            kwargs = {}
             for name, (start, end) in self._submodel_state_slices.items():
                 submodel = self._submodels[name]
                 x_sub_vec = x_vec[start:end]
-                x_struct_sub = copy.deepcopy(submodel.x0)
+                # Use submodel's state type to reconstruct from vector
+                kwargs[name] = type(submodel.x0).from_vec(x_sub_vec)
+            return cls(**kwargs)
 
-                # Update each field from the vector slice
-                offset = 0
-                for field_obj in fields(x_struct_sub):
-                    field_val = getattr(x_struct_sub, field_obj.name)
-                    field_size = field_val.shape[0] if hasattr(field_val, "shape") else 1
-                    setattr(x_struct_sub, field_obj.name, x_sub_vec[offset : offset + field_size])
-                    offset += field_size
+        # Create the composite state dataclass
+        ComposedState = make_dataclass(
+            'ComposedState',
+            composite_fields,
+            namespace={'as_vec': _as_vec, 'from_vec': classmethod(_from_vec)}
+        )
 
-                setattr(x_struct, name, x_struct_sub)
-            return x_struct
+        # Create initial state instance
+        self.x0 = ComposedState()
 
-        self._vec_to_state = _vec_to_state
+        # Store helpers for backwards compatibility
+        self._state_to_vec = lambda x_struct: x_struct.as_vec()
+        self._vec_to_state = lambda x_vec: ComposedState.from_vec(x_vec)
 
     # Utility methods
     def saturate(self, val, lower, upper):

@@ -3,7 +3,7 @@
 import casadi as ca
 import numpy as np
 import pytest
-from cubs2_dynamics.model import ModelMX, ModelSX, input_var, output_var, param, state, symbolic
+from cyecca.dynamics import ModelMX, ModelSX, input_var, output_var, param, state, symbolic
 
 
 class TestModelCreate:
@@ -297,7 +297,7 @@ class TestModelComposition:
 
     def test_compose_states_merge(self):
         """Test that compose_states properly merges multiple state types."""
-        from cubs2_dynamics.model import compose_states
+        from cyecca.dynamics import compose_states
 
         @symbolic
         class States1:

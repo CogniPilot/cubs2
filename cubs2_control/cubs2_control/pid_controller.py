@@ -2,7 +2,7 @@
 
 import casadi as ca
 from beartype import beartype
-from cubs2_dynamics.model import ModelSX, input_var, output_var, param, state, symbolic
+from cyecca.dynamics import ModelSX, input_var, output_var, param, state, symbolic
 
 
 @symbolic

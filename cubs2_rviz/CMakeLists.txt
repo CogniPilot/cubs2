@@ -14,6 +14,11 @@ find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
+# Find GStreamer
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0)
+pkg_check_modules(GSTREAMER_APP REQUIRED gstreamer-app-1.0)
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -22,6 +27,13 @@ find_package(Qt5 COMPONENTS Widgets REQUIRED)
 
 include_directories(
   include
+  ${GSTREAMER_INCLUDE_DIRS}
+  ${GSTREAMER_APP_INCLUDE_DIRS}
+)
+
+link_directories(
+  ${GSTREAMER_LIBRARY_DIRS}
+  ${GSTREAMER_APP_LIBRARY_DIRS}
 )
 
 # RViz plugin library
@@ -29,9 +41,11 @@ add_library(cubs2_rviz SHARED
   src/rviz/joy_panel.cpp
   src/rviz/sim_panel.cpp
   src/rviz/hud_panel.cpp
+  src/rviz/video_panel.cpp
   include/cubs2_rviz/joy_panel.hpp
   include/cubs2_rviz/sim_panel.hpp
   include/cubs2_rviz/hud_panel.hpp
+  include/cubs2_rviz/video_panel.hpp
 )
 
 ament_target_dependencies(cubs2_rviz
@@ -44,7 +58,11 @@ ament_target_dependencies(cubs2_rviz
   sensor_msgs
 )
 
-target_link_libraries(cubs2_rviz Qt5::Widgets)
+target_link_libraries(cubs2_rviz 
+  Qt5::Widgets
+  ${GSTREAMER_LIBRARIES}
+  ${GSTREAMER_APP_LIBRARIES}
+)
 
 # Install library
 install(TARGETS

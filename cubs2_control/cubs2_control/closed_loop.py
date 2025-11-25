@@ -3,7 +3,7 @@
 import casadi as ca
 from beartype import beartype
 from cubs2_control.autolevel_controller import autolevel_controller
-from cubs2_dynamics.model import ModelSX, compose_states, input_var, output_var, symbolic
+from cyecca.dynamics import ModelSX, compose_states, input_var, output_var, symbolic
 from cubs2_dynamics.sportcub import sportcub
 
 
@@ -72,8 +72,8 @@ def closed_loop_sportcub() -> ModelSX:
     parent.connect("y.elev", "controller.y.elev")
     parent.connect("y.rud", "controller.y.rud")
     parent.connect("y.thr", "controller.y.thr")
-    parent.connect("y.F", "plant.y.F")
-    parent.connect("y.M", "plant.y.M")
+    parent.connect("y.F", "plant.y.F_b")
+    parent.connect("y.M", "plant.y.M_b")
 
     # Build the composed model with single integration loop
     parent.build_composed(integrator="rk4")

@@ -4,7 +4,7 @@ import casadi as ca
 import numpy as np
 import pytest
 from cubs2_dynamics.linearize import analyze_modes, find_trim, linearize_dynamics
-from cubs2_dynamics.model import ModelSX, input_var, param, state, symbolic
+from cyecca.dynamics import ModelSX, input_var, param, state, symbolic
 
 
 def simple_oscillator_classes():

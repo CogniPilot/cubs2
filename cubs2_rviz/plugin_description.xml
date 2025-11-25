@@ -20,4 +20,12 @@
       Heads-Up Display showing attitude (roll/pitch/yaw), altitude, and airspeed.
     </description>
   </class>
+  <class name="cubs2::VideoPanel"
+         type="cubs2::VideoPanel"
+         base_class_type="rviz_common::Panel">
+    <description>
+      Video streaming panel using GStreamer for live drone camera feed.
+      Supports RTSP, UDP, USB cameras, and test patterns.
+    </description>
+  </class>
 </library>

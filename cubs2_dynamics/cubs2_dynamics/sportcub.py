@@ -6,7 +6,7 @@ import casadi as ca
 import cyecca.lie as lie
 import numpy as np
 from beartype import beartype
-from cubs2_dynamics.model import ModelSX, input_var, output_var, param, state, symbolic
+from cyecca.dynamics import ModelSX, input_var, output_var, param, state, symbolic
 from cubs2_dynamics.trim_fixed_wing import (
     classify_aircraft_modes,
     find_trim_fixed_wing,
@@ -28,23 +28,29 @@ class SportCubStatesQuat:
 
     attitude_rep: ClassVar[AttitudeRep] = "quat"  # Class attribute, not part of state vector
 
-    p: ca.SX = state(3, [0, 0, 0], "position in earth frame (m)")
-    v: ca.SX = state(3, [0, 0, 0], "velocity in earth frame (m/s)")
+    p: ca.SX = state(3, [0, 0, 0], "position in earth frame ENU (m)")
+    v: ca.SX = state(3, [0, 0, 0], "velocity in earth frame ENU (m/s)")
     r: ca.SX = state(4, [1, 0, 0, 0], "attitude quaternion (w,x,y,z) earth to body")
-    w: ca.SX = state(3, [0, 0, 0], "angular velocity in body frame (rad/s)")
+    w: ca.SX = state(3, [0, 0, 0], "angular velocity in body frame FLU (rad/s)")
 
 
 @symbolic
 class SportCubStatesEuler:
-    """Euler angle attitude representation."""
+    """Euler angle representation.
+    
+    Note: Angular velocity w follows FLU convention (p, q, r).
+    Euler angles r = [psi, theta, phi] follow aeronautical convention:
+    - phi (roll): positive = right wing down
+    - theta (pitch): positive = nose up
+    - psi (yaw): positive = nose right (clockwise viewed from above)
+    """
 
     attitude_rep: ClassVar[AttitudeRep] = "euler"  # Class attribute, not part of state vector
 
-    p: ca.SX = state(3, [0, 0, 0], "position in earth frame (m)")
-    v: ca.SX = state(3, [0, 0, 0], "velocity in earth frame (m/s)")
-    r: ca.SX = state(3, [0, 0, 0], "Euler angles 3-2-1 (phi,theta,psi) rad")
-    w: ca.SX = state(3, [0, 0, 0], "angular velocity in body frame (rad/s)")
-
+    p: ca.SX = state(3, [0, 0, 0], "position in earth frame ENU (m)")
+    v: ca.SX = state(3, [0, 0, 0], "velocity in earth frame ENU (m/s)")
+    r: ca.SX = state(3, [0, 0, 0], "Euler angles 3-2-1 [psi,theta,phi] rad")
+    w: ca.SX = state(3, [0, 0, 0], "angular velocity in body frame FLU [p,q,r] (rad/s)")
 
 # Union type for functions that work with both representations
 SportCubStates = Union[SportCubStatesQuat, SportCubStatesEuler]
@@ -77,16 +83,16 @@ class SportCubParams:
     cbar: ca.SX = param(0.09, "mean chord (m)")
     span: ca.SX = param(0.617, "wingspan (m)")
     # Wing mounting angle
-    wing_incidence: ca.SX = param(np.deg2rad(3.0), "wing incidence angle (rad)")
+    wing_incidence: ca.SX = param(np.deg2rad(4.5), "wing incidence angle (rad)")
 
     # Pitch coefficients
-    Cm0: ca.SX = param(0.05, "pitch moment coeff")
-    Cma: ca.SX = param(-0.5, "pitch moment slope (1/rad)")
-    Cmq: ca.SX = param(-3.0, "pitch damping (1/rad)")
+    Cm0: ca.SX = param(-0.05, "pitch moment coeff")
+    Cma: ca.SX = param(-0.8, "pitch moment slope (1/rad)")
+    Cmq: ca.SX = param(-12.0, "pitch damping (1/rad)")
 
     # Lift & drag
-    CL0: ca.SX = param(0.12, "lift coeff at zero AoA")  # Increased for higher CL in glide
-    CLa: ca.SX = param(4.2, "lift slope (1/rad)")
+    CL0: ca.SX = param(0.3, "lift coeff at zero AoA")
+    CLa: ca.SX = param(4.7, "lift slope (1/rad)")
     CD0: ca.SX = param(0.045, "parasitic drag")  # Low drag for efficient glider
     k_ind: ca.SX = param(0.09, "induced drag factor")
     CD0_fp: ca.SX = param(0.30, "flat plate drag")
@@ -95,7 +101,7 @@ class SportCubParams:
     # Control effectiveness
     Clda: ca.SX = param(0.070, "aileron roll (1/rad)")
     Cldr: ca.SX = param(0.018, "rudder roll (1/rad)")
-    Cmde: ca.SX = param(0.35, "elevator pitch (1/rad)")
+    Cmde: ca.SX = param(1.05, "elevator pitch (1/rad)")
     Cndr: ca.SX = param(0.045, "rudder yaw (1/rad)")
     Cnda: ca.SX = param(0.009, "aileron yaw (1/rad)")
     CYda: ca.SX = param(0.006, "aileron sideforce (1/rad)")
@@ -277,9 +283,12 @@ def aero_coefficients(
     w_b_frd = flu_to_frd(x.w)
     P, Q, R = w_b_frd[0], w_b_frd[1], w_b_frd[2]
 
-    ail_rad = p.max_defl_ail * clamp(u.ail, -1, 1)
-    elev_rad = p.max_defl_elev * clamp(u.elev, -1, 1)
-    rud_rad = p.max_defl_rud * clamp(u.rud, -1, 1) * -1  # Rudder sign convention
+    # Convert normalized control inputs to radians (no trim here - trim is in controller)
+    ail_rad = clamp(p.max_defl_ail * u.ail, -p.max_defl_ail, p.max_defl_ail)
+    elev_rad = clamp(p.max_defl_elev * u.elev, -p.max_defl_elev, p.max_defl_elev)
+    rud_rad = clamp(
+        p.max_defl_rud * u.rud * -1, -p.max_defl_rud, p.max_defl_rud
+    )  # Rudder sign convention
 
     sigma = (1 + ca.tanh((alpha - p.alpha_stall) / p.blend_width)) / 2
 
@@ -537,13 +546,13 @@ def sportcub(attitude_rep: AttitudeRep = "quat") -> ModelSX:
     xAxis = ca.vertcat(1, 0, 0)
     zAxis = ca.vertcat(0, 0, 1)
 
-    # Get rotation matrix based on attitude representation
+    # Get rotation matrix and attitude element (SO3 group element) based on representation
     if attitude_rep == "quat":
         R_eb = lie.SO3Dcm.from_Quat(lie.SO3Quat.elem(x.r))
-        att_group = lie.SO3Quat.elem(x.r)
+        att = lie.SO3Quat.elem(x.r)  # SO3 group element (quaternion)
     elif attitude_rep == "euler":
         R_eb = lie.SO3Dcm.from_Euler(lie.SO3EulerB321.elem(x.r))
-        att_group = lie.SO3EulerB321.elem(x.r)
+        att = lie.SO3EulerB321.elem(x.r)  # SO3 group element (Euler B321)
     else:
         raise ValueError(f"Invalid attitude representation: {attitude_rep}")
 
@@ -591,7 +600,7 @@ def sportcub(attitude_rep: AttitudeRep = "quat") -> ModelSX:
     if attitude_rep == "quat":
         y.q = x.r
     else:  # euler
-        quat_group = lie.SO3Quat.from_Euler(att_group)
+        quat_group = lie.SO3Quat.from_Euler(att)
         y.q = quat_group.param
 
     # Dynamics equations
@@ -599,22 +608,15 @@ def sportcub(attitude_rep: AttitudeRep = "quat") -> ModelSX:
     F_e = R_eb @ F_b
     v_dot = F_e / p.m  # No additional gravity term - already in F_b
 
-    # Attitude derivative depends on representation
+    # Attitude derivative: att_dot = J @ w_body
+    # The right_jacobian() method returns the kinematic matrix J for each representation
     if attitude_rep == "quat":
-        # Quaternion: use right Jacobian
-        att_dot = att_group.right_jacobian() @ x.w
+        # Quaternion kinematics (no singularities)
+        att_dot = att.right_jacobian() @ x.w
     else:  # euler
-        # Euler B321 (state order: psi, theta, phi)
-        # Body angular velocity in FLU: [p, q, r] = [wx, wy, wz]
-        theta, phi = x.r[1], x.r[2]
-        p_body, q_body, r_body = x.w[0], x.w[1], x.w[2]
-
-        # Euler angle rates for B321 sequence
-        psi_dot = (q_body * ca.sin(phi) + r_body * ca.cos(phi)) / ca.cos(theta)
-        theta_dot = q_body * ca.cos(phi) - r_body * ca.sin(phi)
-        phi_dot = p_body + (q_body * ca.sin(phi) + r_body * ca.cos(phi)) * ca.tan(theta)
-
-        att_dot = ca.vertcat(psi_dot, theta_dot, phi_dot)
+        # Euler B321 kinematics (singularity at theta = ±90°)
+        # For [psi, theta, phi], returns 3x3 matrix J such that euler_dot = J @ w_body
+        att_dot = att.right_jacobian() @ x.w
 
     w_dot = ca.inv(J) @ (M_b - ca.cross(x.w, J @ x.w))
 

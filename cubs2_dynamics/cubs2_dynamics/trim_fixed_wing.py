@@ -3,7 +3,7 @@
 import casadi as ca
 import numpy as np
 from beartype import beartype
-from cubs2_dynamics.model import ModelSX
+from cyecca.dynamics import ModelSX
 
 
 @beartype
@@ -80,15 +80,15 @@ def find_trim_fixed_wing(
         model: ModelSX,
         x,  # State dataclass instance (symbolic)
         u,  # Input dataclass instance (symbolic)
+        p,  # Parameter dataclass instance (symbolic)
         x_dot,  # State derivative dataclass instance (symbolic)
-        p_vec: ca.DM | np.ndarray,
     ) -> ca.MX | ca.SX:
         """Aircraft-specific cost for level flight trim.
 
         All state/input variables are already wrapped in dataclass instances!
         """
         # Calculate outputs for aerodynamic coefficients
-        y = model.output_type.from_vec(model.f_y(x.as_vec(), u.as_vec(), p_vec))
+        y = model.output_type.from_vec(model.f_y(x.as_vec(), u.as_vec(), p.as_vec()))
 
         # PRIMARY: Zero accelerations for steady-state trim
         obj = 10000.0 * ca.sumsqr(x_dot.v) + 10000.0 * ca.sumsqr(x_dot.w)
@@ -123,8 +123,8 @@ def find_trim_fixed_wing(
         model: ModelSX,
         x,  # State dataclass instance (symbolic)
         u,  # Input dataclass instance (symbolic)
+        p,  # Parameter dataclass instance (symbolic)
         x_dot,  # State derivative dataclass instance (symbolic)
-        p_vec: ca.DM | np.ndarray,
     ) -> list:
         """Aircraft-specific constraints for level flight trim.
 

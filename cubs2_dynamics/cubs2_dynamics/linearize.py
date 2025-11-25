@@ -52,11 +52,11 @@ def find_trim(
         using `.as_vec()`. If sequence length must match state dimension.
     u_guess : Sequence | dataclass | None
         Initial input guess. Defaults to `model.u0` if None.
-    cost_fn : callable(opti, model, x, u, x_dot, p_vec) -> expression
-        Builds the objective expression where x, u, x_dot are dataclass instances.
+    cost_fn : callable(model, x, u, p, x_dot) -> expression
+        Builds the objective expression where x, u, p, x_dot are dataclass instances.
         If None, a default is used: minimize( ||x_dot||^2 + 1e-3*||u||^2 )
-    constraints_fn : callable(opti, model, x, u, x_dot, p_vec) -> None
-        Adds problem-specific constraints where x, u, x_dot are dataclass instances.
+    constraints_fn : callable(model, x, u, p, x_dot) -> None
+        Adds problem-specific constraints where x, u, p, x_dot are dataclass instances.
         If None, no constraints are added (fully generic).
     print_progress : bool
         Print high-level optimization progress.
@@ -115,13 +115,14 @@ def find_trim(
     # Wrap variables in dataclass instances for structured access
     x = model.state_type.from_vec(x_var)
     u = model.input_type.from_vec(u_var)
+    p = model.param_type.from_vec(p_vec)
     x_dot = model.state_type.from_vec(x_dot_vec)
 
     # Default cost if none provided - generic: minimize state derivatives and control effort
     if cost_fn is None:
         obj = ca.sumsqr(x_dot_vec) + 1e-3 * ca.sumsqr(u_var)
     else:
-        obj = cost_fn(model, x, u, x_dot, p_vec)
+        obj = cost_fn(model, x, u, p, x_dot)
         if obj is None:
             raise ValueError("cost_fn returned None; must return CasADi expression")
 
@@ -130,10 +131,16 @@ def find_trim(
     # Apply constraints - only use custom constraints function
     # Generic linearization should not assume specific model structure
     if constraints_fn is not None:
-        constraints = constraints_fn(model, x, u, x_dot, p_vec)
+        constraints = constraints_fn(model, x, u, p, x_dot)
         if constraints is not None:
-            for constraint in constraints:
-                opti.subject_to(constraint)
+            # Handle both single constraint and list of constraints
+            if isinstance(constraints, (list, tuple)):
+                for constraint in constraints:
+                    opti.subject_to(constraint)
+            else:
+                # Single constraint expression (e.g., vertcat)
+                # Assume it should equal zero
+                opti.subject_to(constraints == 0)
 
     # Solver options
     opts = {

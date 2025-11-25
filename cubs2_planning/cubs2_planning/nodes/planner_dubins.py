@@ -25,12 +25,12 @@ class DubinsGatePlannerNode(Node):
         self.declare_parameter("show_gate_turn_circles", False)
         self.declare_parameter("show_headings", False)
         self.declare_parameter("show_path_marker", False)
-        self.declare_parameter("heading_spacing", 20)
-        self.declare_parameter("altitude", 2.0)
+        self.declare_parameter("planner.heading_spacing", 20)
+        self.declare_parameter("planner.altitude", 2.0)
         self.declare_parameter(
-            "gate_sequence", [0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]
+            "planner.gate_sequence", [0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]
         )  # Default sequence
-        self.declare_parameter("velocity", 5.0)  # m/s - velocity along trajectory
+        self.declare_parameter("planner.velocity", 5.0)  # m/s - velocity along trajectory
         self.declare_parameter("reference_frame_id", "reference")  # TF frame name
 
         self.marker_pub = self.create_publisher(MarkerArray, "dubins_trajectory", 10)
@@ -66,7 +66,7 @@ class DubinsGatePlannerNode(Node):
     def plan_trajectory(self):
         R = self.get_parameter("turn_radius").value
         n = self.get_parameter("sample_points").value
-        gate_sequence = self.get_parameter("gate_sequence").value
+        gate_sequence = self.get_parameter("planner.gate_sequence").value
 
         all_gates = self.racecourse.gates
 
@@ -130,7 +130,7 @@ class DubinsGatePlannerNode(Node):
         if not self.trajectory_points:
             return
 
-        velocity = self.get_parameter("velocity").value
+        velocity = self.get_parameter("planner.velocity").value
         g = 9.81  # gravity (m/s^2)
 
         # Add arc length and time to each point
@@ -301,7 +301,7 @@ class DubinsGatePlannerNode(Node):
         return mid + 1
 
     def _add_heading_arrows(self, markers, factory, stamp, seg, mid):
-        spacing = self.get_parameter("heading_spacing").value
+        spacing = self.get_parameter("planner.heading_spacing").value
         for i in range(0, len(seg["points"]), spacing):
             pt = seg["points"][i]
             m = factory.arrow_pose(

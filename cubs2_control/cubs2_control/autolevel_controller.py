@@ -3,7 +3,7 @@
 import casadi as ca
 import numpy as np
 from beartype import beartype
-from cubs2_dynamics.model import ModelSX, input_var, output_var, param, state, symbolic
+from cyecca.dynamics import ModelSX, input_var, output_var, param, state, symbolic
 
 
 @symbolic
@@ -43,6 +43,11 @@ class AutolevelParams:
     # Speed control
     Kp_speed: ca.SX = param(0.7, "P gain speed")
     speed_ref: ca.SX = param(20.0, "reference speed (m/s)")
+
+    # Trim offsets (controller-level trim for hands-off flight)
+    trim_aileron: ca.SX = param(0.0, "aileron trim offset (rad)")
+    trim_elevator: ca.SX = param(0.0, "elevator trim offset (rad)")
+    trim_rudder: ca.SX = param(0.0, "rudder trim offset (rad)")
 
     # Stick to attitude mapping (for stabilized mode)
     stick_to_phi: ca.SX = param(
@@ -152,9 +157,10 @@ def autolevel_controller() -> ModelSX:
 
     # Mode switch: 0 = manual (pass-through), 1 = stabilized (autopilot)
     # Using smooth transition: mode is expected to be 0.0 or 1.0
-    y.ail = u.ail_manual * (1.0 - u.mode) + ail_stabilized * u.mode
-    y.elev = u.elev_manual * (1.0 - u.mode) + elev_stabilized * u.mode
-    y.rud = u.rud_manual * (1.0 - u.mode) + rud_stabilized * u.mode
+    # Apply trim offsets to all outputs (both manual and stabilized modes)
+    y.ail = (u.ail_manual * (1.0 - u.mode) + ail_stabilized * u.mode) + p.trim_aileron
+    y.elev = (u.elev_manual * (1.0 - u.mode) + elev_stabilized * u.mode) + p.trim_elevator
+    y.rud = (u.rud_manual * (1.0 - u.mode) + rud_stabilized * u.mode) + p.trim_rudder
     y.thr = u.thr_manual * (1.0 - u.mode) + thr_stabilized * u.mode
 
     model.build(f_x=f_x, f_y=y.as_vec(), integrator="euler")

@@ -8,9 +8,8 @@
     <arg name="rate" default="1.0"/>
     <arg name="plane_urdf" default="$(find-pkg-share cubs2_description)/urdf/sportcub.urdf.xacro"/>
     
-    <!-- Simulation and planner args -->
-    <arg name="gate_sequence" default="[0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]"/>
-    <arg name="show_forces" default="true"/>
+    <!-- Configuration file with all tuning parameters -->
+    <arg name="config_file" default="$(find-pkg-share cubs2_bringup)/config/sportcub.yaml"/>
 
     <!-- Replay: recorded flight from rosbag (ghost plane for comparison) -->
     <executable
@@ -42,14 +41,14 @@
     <!-- Vehicle: live simulation node -->
     <node pkg="cubs2_simulation" exec="sim.py" output="screen" if="$(var enable_sim)">
         <param name="use_sim_time" value="false"/>
-        <param name="show_forces" value="$(var show_forces)"/>
+        <param from="$(var config_file)"/>
     </node>
 
     <!-- Vehicle: plane visualization -->
     <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="vehicle" output="screen" if="$(var enable_sim)">
         <remap from="robot_description" to="/vehicle/description"/>
         <param name="robot_description"
-               value="$(command 'xacro $(var plane_urdf) frame_id:=vehicle show_forces:=$(var show_forces)')"/>
+               value="$(command 'xacro $(var plane_urdf) frame_id:=vehicle')"/>
         <param name="use_sim_time" value="false"/>
         <param name="publish_frequency" value="50.0"/>
     </node>
@@ -58,7 +57,7 @@
     <node pkg="cubs2_planning" exec="planner_dubins.py"
             name="dubins_planner" output="screen">
         <param name="use_sim_time" value="false"/>
-        <param name="gate_sequence" value="$(var gate_sequence)"/>
+        <param from="$(var config_file)"/>
     </node>
 
     <!-- Reference plane visualization for planner -->
