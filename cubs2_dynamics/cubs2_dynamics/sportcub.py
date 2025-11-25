@@ -68,7 +68,7 @@ class SportCubInputs:
 @symbolic
 class SportCubParams:
     # Physical properties
-    thr_max: ca.SX = param(0.60, "maximum thrust (N)")
+    thr_max: ca.SX = param(0.30, "maximum thrust (N)")
     m: ca.SX = param(0.065, "mass (kg)")  # 65g actual weight
     S: ca.SX = param(0.055, "wing area (m^2)")  # Moderate wing area
     rho: ca.SX = param(1.225, "air density (kg/m^3)")
@@ -84,7 +84,7 @@ class SportCubParams:
     cbar: ca.SX = param(0.09, "mean chord (m)")
     span: ca.SX = param(0.617, "wingspan (m)")
     # Wing mounting angle
-    wing_incidence: ca.SX = param(np.deg2rad(4.5), "wing incidence angle (rad)")
+    wing_incidence: ca.SX = param(np.deg2rad(6.0), "wing incidence angle (rad)")
 
     # Pitch coefficients
     Cm0: ca.SX = param(-0.05, "pitch moment coeff")
@@ -92,21 +92,21 @@ class SportCubParams:
     Cmq: ca.SX = param(-12.0, "pitch damping (1/rad)")
 
     # Lift & drag
-    CL0: ca.SX = param(0.3, "lift coeff at zero AoA")
+    CL0: ca.SX = param(0.5, "lift coeff at zero AoA")
     CLa: ca.SX = param(4.7, "lift slope (1/rad)")
-    CD0: ca.SX = param(0.045, "parasitic drag")  # Low drag for efficient glider
+    CD0: ca.SX = param(0.06, "parasitic drag")  # Low drag for efficient glider
     k_ind: ca.SX = param(0.09, "induced drag factor")
     CD0_fp: ca.SX = param(0.30, "flat plate drag")
     CY_fp: ca.SX = param(0.50, "flat plate sideforce")
 
     # Control effectiveness
-    Clda: ca.SX = param(0.070, "aileron roll (1/rad)")
-    Cldr: ca.SX = param(0.018, "rudder roll (1/rad)")
-    Cmde: ca.SX = param(1.05, "elevator pitch (1/rad)")
-    Cndr: ca.SX = param(0.045, "rudder yaw (1/rad)")
-    Cnda: ca.SX = param(0.009, "aileron yaw (1/rad)")
-    CYda: ca.SX = param(0.006, "aileron sideforce (1/rad)")
-    CYdr: ca.SX = param(-0.045, "rudder sideforce (1/rad)")
+    Clda: ca.SX = param(0.05, "aileron roll (1/rad)")
+    Cldr: ca.SX = param(0.006, "rudder roll (1/rad)")
+    Cmde: ca.SX = param(0.45, "elevator pitch (1/rad)")
+    Cndr: ca.SX = param(0.015, "rudder yaw (1/rad)")
+    Cnda: ca.SX = param(0.006, "aileron yaw (1/rad)")
+    CYda: ca.SX = param(0.004, "aileron sideforce (1/rad)")
+    CYdr: ca.SX = param(-0.015, "rudder sideforce (1/rad)")
 
     # Stability & damping
     Cnb: ca.SX = param(0.06, "yaw stiffness (1/rad)")

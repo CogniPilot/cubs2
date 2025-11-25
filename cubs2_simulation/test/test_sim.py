@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import rclpy
 from cubs2_msgs.msg import AircraftControl
-from cubs2_simulation.nodes.sim import SimNode
+from cubs2_simulation.sim import SimNode
 from rclpy.executors import SingleThreadedExecutor
 from rosgraph_msgs.msg import Clock
 from std_msgs.msg import Bool, Empty, Float64

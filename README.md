@@ -66,26 +66,39 @@ cd /path/to/your/workspace
 colcon build --symlink-install
 source install/setup.bash
 
-# Launch simulation with visualization
+# Launch simulation with visualization (all-in-one)
 ros2 launch cubs2_bringup sim.xml
+```
 
-# Launch visualization only (in separate terminal)
-ros2 launch cubs2_bringup viz.xml
+This single command starts simulation, visualization, and replay by default.
 
-# Launch gamepad control (optional)
-ros2 launch cubs2_bringup gamepad_control.xml
+### Launch Options
+
+Customize the launch with optional arguments:
+
+```bash
+# Disable visualization
+ros2 launch cubs2_bringup sim.xml viz:=false
+
+# Disable replay
+ros2 launch cubs2_bringup sim.xml replay:=false
+
+# Enable gamepad control
+ros2 launch cubs2_bringup sim.xml gamepad:=true
+
+# Launch only specific components
+ros2 launch cubs2_bringup viz.xml        # Visualization only
+ros2 launch cubs2_bringup gamepad_control.xml  # Gamepad only
 ```
 
 ### Replay Mode
 
-Compare simulation with recorded flight data:
+Replay is **enabled by default**, showing a "ghost" plane following recorded flight data.
+The replay loops continuously for easy comparison with live simulation.
 
 ```bash
-# Enable replay mode
-ros2 launch cubs2_bringup sim.xml enable_replay:=true
-
-# Adjust playback speed
-ros2 launch cubs2_bringup sim.xml enable_replay:=true rate:=2.0
+# Use different bag file
+ros2 launch cubs2_bringup sim.xml bag_path:=/path/to/your/bag.mcap
 ```
 
 ## Topics

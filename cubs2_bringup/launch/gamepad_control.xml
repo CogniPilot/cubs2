@@ -1,6 +1,9 @@
 <launch>
   <!-- Launch gamepad control for SportCub simulation -->
   
+  <!-- Configuration file path -->
+  <let name="gamepad_config" value="$(find-pkg-share cubs2_bringup)/config/8bitdo_81hd.yaml"/>
+  
   <!-- Launch joy_node to read gamepad input -->
   <node pkg="joy" exec="joy_node" name="joy_node">
     <!-- Common gamepad device paths:
@@ -9,25 +12,11 @@
     -->
     <param name="dev" value="/dev/input/js0"/>
     <param name="deadzone" value="0.05"/>
-    <param name="autorepeat_rate" value="20.0"/>
+    <param name="autorepeat_rate" value="50.0"/>
   </node>
   
-  <!-- Launch gamepad control node -->
+  <!-- Launch gamepad control node with configuration -->
   <node pkg="cubs2_control" exec="gamepad_control.py" name="gamepad_control" output="screen">
-    <!-- Axis mapping (can be customized for different gamepad layouts) -->
-    <param name="axis_throttle" value="1"/>    <!-- Left stick Y -->
-    <param name="axis_rudder" value="0"/>      <!-- Left stick X -->
-    <param name="axis_elevator" value="4"/>    <!-- Right stick Y -->
-    <param name="axis_aileron" value="3"/>     <!-- Right stick X -->
-    
-    <!-- Control parameters -->
-    <param name="throttle_default" value="0.0"/>
-    <param name="deadzone" value="0.05"/>
-    
-    <!-- Axis inversions (set to true if axis goes wrong direction) -->
-    <param name="invert_aileron" value="true"/>
-    <param name="invert_elevator" value="true"/>
-    <param name="invert_rudder" value="false"/>
-    <param name="invert_throttle" value="false"/>
+    <param from="$(var gamepad_config)"/>
   </node>
 </launch>

@@ -7,7 +7,13 @@ from builtin_interfaces.msg import Time
 from cubs2_control.closed_loop import closed_loop_sportcub
 from cubs2_dynamics.sportcub import SportCubOutputs
 from cubs2_msgs.msg import AircraftControl
-from geometry_msgs.msg import Point, PoseStamped, TransformStamped, TwistStamped, Vector3Stamped
+from geometry_msgs.msg import (
+    Point,
+    PoseStamped,
+    TransformStamped,
+    TwistStamped,
+    Vector3Stamped,
+)
 from rclpy.node import Node
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import JointState
@@ -32,6 +38,17 @@ class SimNode(Node):
         self.declare_parameter("controller.trim.aileron", 0.0)
         self.declare_parameter("controller.trim.elevator", 0.0)
         self.declare_parameter("controller.trim.rudder", 0.0)
+
+        # Initial pose parameters (ENU frame, yaw about +z)
+        self.declare_parameter("initial_position.x", 0.0)
+        self.declare_parameter("initial_position.y", 0.0)
+        self.declare_parameter("initial_position.z", 0.1)
+        self.declare_parameter("initial_yaw", 0.0)  # radians
+
+        self.initial_x = float(self.get_parameter("initial_position.x").value)
+        self.initial_y = float(self.get_parameter("initial_position.y").value)
+        self.initial_z = float(self.get_parameter("initial_position.z").value)
+        self.initial_yaw = float(self.get_parameter("initial_yaw").value)
 
         self.tf_broadcaster = TransformBroadcaster(self)
         self.sim_time_publisher = self.create_publisher(Clock, "/clock", 10)
@@ -94,6 +111,9 @@ class SimNode(Node):
         self.u_cl = copy.deepcopy(self.cl_model.u0)
         self.p_cl = copy.deepcopy(self.cl_model.p0)
 
+        # Apply initial pose to both composed and plant-only models
+        self._apply_initial_pose()
+
         # Manual control inputs from joystick/gamepad
         self.u.ail_manual = 0.0
         self.u.elev_manual = 0.0
@@ -103,21 +123,12 @@ class SimNode(Node):
 
         # Ready-for-takeoff start (taildragger sitting on its main wheels, no initial bounce).
         # World frame ENU (z up), ground plane z=0. Main wheels located at z=-0.1 in body frame, so
-        # choosing CG z = 0.1 puts both main wheels exactly on the ground with zero penetration.
+        # choosing CG z ≈ 0.1 puts both main wheels exactly on the ground with zero penetration.
         # Tail wheel in current model sits at z=0 (should be below CG physically); this means tail wheel is raised.
         # For a simple takeoff run this is acceptable; adjust dynamics wheel geometry later for visual accuracy.
 
         # Set initial plant state using structured access
-        self.x.plant.p[2] = 0.1  # CG altitude so main wheels touch ground
-        self.x.plant.v[0] = 0.0  # Start from rest
-        self.x.plant.v[1] = 0.0
-        self.x.plant.v[2] = 0.0
-
-        # Also initialize plant-only state
-        self.x_cl.p[2] = 0.1
-        self.x_cl.v[0] = 0.0
-        self.x_cl.v[1] = 0.0
-        self.x_cl.v[2] = 0.0
+        # (position and yaw are handled inside _apply_initial_pose)
 
         # Subscribe to control messages (published by virtual joystick, gamepad, keyboard)
         self.control_subscription = self.create_subscription(
@@ -143,6 +154,34 @@ class SimNode(Node):
         self.elev_cmd = 0.0
         self.rud_cmd = 0.0
         self.thr_cmd = 0.0
+
+    def _apply_initial_pose(self):
+        """Apply configured initial position and yaw to aircraft state."""
+        # Convert yaw to quaternion (rotation about z-axis in ENU frame)
+        # Quaternion stored as [w, x, y, z]
+        half_yaw = self.initial_yaw / 2.0
+        qw = np.cos(half_yaw)
+        qx = 0.0
+        qy = 0.0
+        qz = np.sin(half_yaw)
+
+        # Apply to composed model (plant portion)
+        self.x.plant.p[0] = self.initial_x
+        self.x.plant.p[1] = self.initial_y
+        self.x.plant.p[2] = self.initial_z
+        self.x.plant.r[0] = qw
+        self.x.plant.r[1] = qx
+        self.x.plant.r[2] = qy
+        self.x.plant.r[3] = qz
+
+        # Apply to plant-only model
+        self.x_cl.p[0] = self.initial_x
+        self.x_cl.p[1] = self.initial_y
+        self.x_cl.p[2] = self.initial_z
+        self.x_cl.r[0] = qw
+        self.x_cl.r[1] = qx
+        self.x_cl.r[2] = qy
+        self.x_cl.r[3] = qz
 
     def get_sim_time_msg(self):
         sim_time_msg = Clock()
@@ -691,16 +730,7 @@ class SimNode(Node):
         self.p_cl = copy.deepcopy(self.cl_model.p0)
 
         # Reapply takeoff-ready initial conditions (aircraft state portion)
-        self.x.plant.p[2] = 0.1
-        self.x.plant.v[0] = 0.0
-        self.x.plant.v[1] = 0.0
-        self.x.plant.v[2] = 0.0
-
-        # Also reset plant-only state
-        self.x_cl.p[2] = 0.1
-        self.x_cl.v[0] = 0.0
-        self.x_cl.v[1] = 0.0
-        self.x_cl.v[2] = 0.0
+        self._apply_initial_pose()
 
         self.u.thr_manual = 0.0
         self.u.elev_manual = 0.0

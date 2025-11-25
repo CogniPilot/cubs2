@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 import rclpy
-from racecourse_description.nodes.racecourse_markers import RacecourseNode
+from racecourse_description.racecourse_markers import RacecourseNode
 from rclpy.executors import SingleThreadedExecutor
 
 

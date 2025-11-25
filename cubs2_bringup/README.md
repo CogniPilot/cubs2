@@ -8,32 +8,37 @@ System-level launch files orchestrating simulation, visualization, and planning.
 
 ### sim.xml
 
-Complete aircraft simulation with autonomous flight.
+Complete aircraft simulation with visualization and autonomous flight.
 
 **Arguments:**
-- `enable_sim` (default: true) - Run live simulation
-- `enable_replay` (default: false) - Show recorded flight data
-- `show_forces` (default: true) - Visualize forces/moments
-- `rate` (default: 1.0) - Simulation speed multiplier
-- `gate_sequence` (default: [0,1,2,4,3,...]) - Waypoint order
+- `replay` (default: true) - Show recorded flight data
+- `viz` (default: true) - Launch RViz visualization
+- `gamepad` (default: false) - Enable gamepad control
 - `bag_path` (default: cubs2_data rosbag) - Path to replay data
 
 **Nodes Started:**
 - Simulation node (`cubs2_simulation`)
 - Dubins path planner (`cubs2_planning`)
 - Robot state publisher (`cubs2_description`)
-- Racecourse markers (`racecourse_description`)
+- RViz2 with custom panels (if `viz:=true`)
+- Rosbag replay player (if `replay:=true`)
 
 **Usage:**
 ```bash
-# Standard simulation
+# Standard simulation (visualization + replay enabled by default)
 ros2 launch cubs2_bringup sim.xml
 
-# 2x speed with replay comparison
-ros2 launch cubs2_bringup sim.xml rate:=2.0 enable_replay:=true
+# Simulation only (no visualization)
+ros2 launch cubs2_bringup sim.xml viz:=false
 
-# Custom gate sequence
-ros2 launch cubs2_bringup sim.xml gate_sequence:="[0,1,2,3,4]"
+# Disable replay
+ros2 launch cubs2_bringup sim.xml replay:=false
+
+# Enable gamepad control
+ros2 launch cubs2_bringup sim.xml gamepad:=true
+
+# Custom bag file
+ros2 launch cubs2_bringup sim.xml bag_path:=/path/to/bag.mcap
 ```
 
 ### viz.xml
@@ -91,36 +96,36 @@ ros2 launch cubs2_bringup planning.xml gate_sequence:="[0,2,4,6]"
 
 ## Complete Workflow
 
-### 1. Standard Simulation
+### 1. Standard Simulation (Recommended)
 
 ```bash
-# Terminal 1: Launch simulation
+# Single command - starts everything
 ros2 launch cubs2_bringup sim.xml
-
-# Terminal 2: Launch visualization
-ros2 launch cubs2_bringup viz.xml
 ```
 
-### 2. Manual Control
+This launches simulation, visualization, and replay in one terminal.
+
+### 2. Simulation Without Visualization
 
 ```bash
-# Terminal 1: Simulation only (no autonomous planner)
-ros2 run cubs2_simulation sim
+# Run simulation in headless mode
+ros2 launch cubs2_bringup sim.xml viz:=false
+```
 
-# Terminal 2: Gamepad control
+### 3. Manual Control
+
+```bash
+# With gamepad
+ros2 launch cubs2_bringup sim.xml gamepad:=true
+
+# Or launch gamepad separately
 ros2 launch cubs2_bringup gamepad_control.xml
-
-# Terminal 3: Visualization
-ros2 launch cubs2_bringup viz.xml
 ```
 
-### 3. Replay Analysis
+### 4. Visualization Only
 
 ```bash
-# Compare simulation with recorded flight
-ros2 launch cubs2_bringup sim.xml enable_replay:=true show_forces:=true
-
-# In separate terminal
+# Connect to running simulation or real aircraft
 ros2 launch cubs2_bringup viz.xml
 ```
 

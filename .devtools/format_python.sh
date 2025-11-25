@@ -31,7 +31,8 @@ black --config .devtools/pyproject.toml \
   cubs2_simulation \
   cubs2_planning \
   racecourse_description \
-  cubs2_description
+  cubs2_description \
+  cubs2_data
 
 # echo ""
 # echo "Running isort on all Python files..."

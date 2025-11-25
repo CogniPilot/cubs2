@@ -159,7 +159,7 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   header_layout->addWidget(title_label);
   header_layout->addStretch();
   enable_checkbox_ = new QCheckBox("Enabled");
-  enable_checkbox_->setChecked(true);
+  enable_checkbox_->setChecked(false);
   header_layout->addWidget(enable_checkbox_);
   layout->addLayout(header_layout);
   connect(enable_checkbox_, &QCheckBox::stateChanged, this, &JoyPanel::onEnabledChanged);
@@ -263,6 +263,9 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   ros_spin_timer_->setInterval(10);  // 100 Hz for responsive callbacks
   connect(ros_spin_timer_, &QTimer::timeout, this, [this]() { rclcpp::spin_some(node_); });
   ros_spin_timer_->start();
+
+  // Set initial state after all widgets are created
+  onEnabledChanged(enable_checkbox_->isChecked() ? Qt::Checked : Qt::Unchecked);
 }
 
 JoyPanel::~JoyPanel() = default;
@@ -332,14 +335,18 @@ void JoyPanel::onResetClicked() {
 
 void JoyPanel::onEnabledChanged(int state) {
   enabled_ = (state == Qt::Checked);
-  // Enable/disable all controls
-  joystick_->setEnabled(enabled_);
+  // Enable/disable controls for user input, but keep them visually active
+  // so they can display external control values
   throttle_slider_->setEnabled(enabled_);
   rudder_slider_->setEnabled(enabled_);
   aileron_trim_slider_->setEnabled(enabled_);
   elevator_trim_slider_->setEnabled(enabled_);
   reset_button_->setEnabled(enabled_);
   mode_combo_->setEnabled(enabled_);
+
+  // Don't disable the joystick widget - it needs to display external control
+  // Just make it non-interactive when disabled
+  joystick_->setAttribute(Qt::WA_TransparentForMouseEvents, !enabled_);
 }
 
 void JoyPanel::onModeChanged(int index) {

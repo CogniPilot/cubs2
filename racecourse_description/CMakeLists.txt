@@ -13,7 +13,7 @@ ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables
 install(PROGRAMS
-  ${PROJECT_NAME}/nodes/racecourse_markers.py
+  ${PROJECT_NAME}/racecourse_markers.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

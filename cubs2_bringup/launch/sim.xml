@@ -2,10 +2,10 @@
 <launch>
 
     <!-- Enable/disable different planes -->
-    <arg name="enable_replay" default="false"/>  <!-- Recorded flight for comparison -->
-    <arg name="enable_sim" default="true"/>     <!-- Live simulation -->
-    <arg name="bag_path" default="$(find-pkg-share cubs2_data)/data/cub_stabilize_2025-10-21.mcap"/>
-    <arg name="rate" default="1.0"/>
+    <arg name="replay" default="true"/>  <!-- Recorded flight for comparison -->
+    <arg name="viz" default="true"/>    <!-- RViz visualization -->
+    <arg name="gamepad" default="false"/> <!-- Gamepad control -->
+    <arg name="bag_path" default="$(find-pkg-share cubs2_data)/data/cub_stabilize_2025_11_13.mcap"/>
     <arg name="plane_urdf" default="$(find-pkg-share cubs2_description)/urdf/sportcub.urdf.xacro"/>
     
     <!-- Configuration file with all tuning parameters -->
@@ -14,15 +14,16 @@
     <!-- Replay: recorded flight from rosbag (ghost plane for comparison) -->
     <executable
         cmd="ros2 bag play $(var bag_path)
-            --topics /cub1/pose
-            --exclude-topics /tf /tf_static /clock"
+            --topics /cub1/pose /cub1/joy_serial_status
+            --exclude-topics /tf /tf_static /clock
+            --loop"
         output="screen"
-        if="$(var enable_replay)"
+        if="$(var replay)"
     />
 
 
     <!-- Replay: pose to TF broadcaster -->
-    <node pkg="cubs2_description" exec="pose_to_tf.py" name="replay_pose_to_tf" output="screen" if="$(var enable_replay)">
+    <node pkg="cubs2_description" exec="pose_to_tf.py" name="replay_pose_to_tf" output="screen" if="$(var replay)">
         <param name="use_sim_time" value="false"/>
         <remap from="pose" to="/cub1/pose"/>
         <param name="frame_id" value="map"/>
@@ -30,7 +31,7 @@
     </node>
 
     <!-- Replay: plane visualization -->
-    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="replay" output="screen" if="$(var enable_replay)">
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="replay" output="screen" if="$(var replay)">
         <remap from="robot_description" to="/replay/description"/>
         <param name="robot_description"
                value="$(command 'xacro $(var plane_urdf) frame_id:=replay')"/>
@@ -39,13 +40,13 @@
     </node>
 
     <!-- Vehicle: live simulation node -->
-    <node pkg="cubs2_simulation" exec="sim.py" output="screen" if="$(var enable_sim)">
+    <node pkg="cubs2_simulation" exec="sim.py" output="screen">
         <param name="use_sim_time" value="false"/>
         <param from="$(var config_file)"/>
     </node>
 
     <!-- Vehicle: plane visualization -->
-    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="vehicle" output="screen" if="$(var enable_sim)">
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" namespace="vehicle" output="screen">
         <remap from="robot_description" to="/vehicle/description"/>
         <param name="robot_description"
                value="$(command 'xacro $(var plane_urdf) frame_id:=vehicle')"/>
@@ -68,5 +69,11 @@
         <param name="use_sim_time" value="false"/>
         <param name="publish_frequency" value="50.0"/>
     </node>
+
+    <!-- Optional: RViz visualization -->
+    <include file="$(find-pkg-share cubs2_bringup)/launch/viz.xml" if="$(var viz)"/>
+
+    <!-- Optional: Gamepad control -->
+    <include file="$(find-pkg-share cubs2_bringup)/launch/gamepad_control.xml" if="$(var gamepad)"/>
 
 </launch>

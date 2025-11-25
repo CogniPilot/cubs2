@@ -235,7 +235,9 @@ bool VideoPanel::createPipeline(const std::string& uri) {
       nullptr,        // eos
       nullptr,        // new_preroll
       on_new_sample,  // new_sample
-      {nullptr}       // padding
+      nullptr,        // new_event
+      nullptr,        // propose_allocation
+      {}              // _gst_reserved
   };
   gst_app_sink_set_callbacks(GST_APP_SINK(appsink_), &callbacks, this, nullptr);
 

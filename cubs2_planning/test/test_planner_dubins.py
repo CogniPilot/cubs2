@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 import rclpy
-from cubs2_planning.nodes.planner_dubins import DubinsGatePlannerNode
+from cubs2_planning.planner_dubins import DubinsGatePlannerNode
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.parameter import Parameter
 
@@ -34,8 +34,8 @@ class TestDubinsGatePlannerNode:
             assert node.has_parameter("racecourse_yaml")
             assert node.has_parameter("turn_radius")
             assert node.has_parameter("sample_points")
-            assert node.has_parameter("altitude")
-            assert node.has_parameter("velocity")
+            assert node.has_parameter("planner.altitude")
+            assert node.has_parameter("planner.velocity")
 
             # Verify planning functions were created
             assert hasattr(node, "plan_fn")
@@ -60,8 +60,8 @@ class TestDubinsGatePlannerNode:
             # Get parameter values
             turn_radius = node.get_parameter("turn_radius").value
             sample_points = node.get_parameter("sample_points").value
-            altitude = node.get_parameter("altitude").value
-            velocity = node.get_parameter("velocity").value
+            altitude = node.get_parameter("planner.altitude").value
+            velocity = node.get_parameter("planner.velocity").value
 
             # Verify reasonable defaults
             assert turn_radius > 0.0
@@ -114,7 +114,7 @@ class TestDubinsGatePlannerNode:
         try:
             node = DubinsGatePlannerNode()
 
-            gate_sequence = node.get_parameter("gate_sequence").value
+            gate_sequence = node.get_parameter("planner.gate_sequence").value
             assert isinstance(gate_sequence, list)
 
         except FileNotFoundError:

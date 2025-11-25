@@ -6,7 +6,7 @@ This guide will help you get started with Cubs2 simulation and visualization.
 Basic Simulation
 ----------------
 
-Launch a complete simulation with visualization:
+Launch a complete simulation with visualization in a single command:
 
 .. code-block:: bash
 
@@ -22,6 +22,35 @@ This will start:
 
 The aircraft will spawn at the origin and you can control it using the joystick panel in RViz.
 
+Launch Options
+--------------
+
+The ``sim.xml`` launch file supports several options:
+
+.. code-block:: bash
+
+   ros2 launch cubs2_bringup sim.xml replay:=false viz:=false gamepad:=true
+
+Available arguments:
+
+* ``replay`` (default: ``true``) - Enable replay of recorded flight data
+* ``viz`` (default: ``true``) - Launch RViz visualization
+* ``gamepad`` (default: ``false``) - Enable gamepad control
+* ``bag_path`` - Path to rosbag file for replay mode
+
+Examples:
+
+.. code-block:: bash
+
+   # Simulation only (no visualization)
+   ros2 launch cubs2_bringup sim.xml viz:=false
+
+   # With gamepad control
+   ros2 launch cubs2_bringup sim.xml gamepad:=true
+
+   # Disable replay
+   ros2 launch cubs2_bringup sim.xml replay:=false
+
 Visualization Only
 ------------------
 
@@ -31,20 +60,32 @@ To launch just the visualization (e.g., for connecting to a real aircraft):
 
    ros2 launch cubs2_bringup viz.xml
 
+.. note::
+   With the new defaults, you typically don't need separate launch calls.
+   Use ``ros2 launch cubs2_bringup sim.xml`` to start everything together.
+
 Replay Mode
 -----------
 
-Cubs2 supports replaying recorded flight data and comparing it with simulation:
+Cubs2 supports replaying recorded flight data and comparing it with simulation.
+Replay mode is **enabled by default**:
 
 .. code-block:: bash
 
-   ros2 launch cubs2_bringup sim.xml replay_mode:=true
+   ros2 launch cubs2_bringup sim.xml
 
-This is useful for:
+To disable replay:
 
-* Debugging flight test data
-* Validating simulation accuracy
-* Comparing controller performance
+.. code-block:: bash
+
+   ros2 launch cubs2_bringup sim.xml replay:=false
+
+The replay shows a "ghost" plane following the recorded trajectory, allowing you to:
+
+* Debug flight test data
+* Validate simulation accuracy
+* Compare controller performance
+* Analyze flight patterns
 
 Available Topics
 ----------------

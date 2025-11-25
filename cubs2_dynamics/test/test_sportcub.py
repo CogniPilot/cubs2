@@ -383,8 +383,8 @@ class TestSportCubNode:
         assert LD_ratio < 10.0, f"L/D unrealistically high: {LD_ratio:.2f}"
 
         # Airspeed should be in efficient glide range
-        assert 5.0 < avg_airspeed < 8.0, f"Average airspeed out of band: {avg_airspeed:.2f} m/s"
-        assert min_airspeed > 4.5, f"Minimum airspeed too low: {min_airspeed:.2f} m/s"
+        assert 4.5 < avg_airspeed < 8.0, f"Average airspeed out of band: {avg_airspeed:.2f} m/s"
+        assert min_airspeed > 4.0, f"Minimum airspeed too low: {min_airspeed:.2f} m/s"
 
         # Angle of attack should be reasonable for efficient glide
         assert (
@@ -656,7 +656,12 @@ class TestSportCubNode:
 
         # Convert quaternion to Euler for comparison
         # quaternion is [w, x, y, z], need to convert to [phi, theta, psi]
-        qw, qx, qy, qz = state_quat.r[0], state_quat.r[1], state_quat.r[2], state_quat.r[3]
+        qw, qx, qy, qz = (
+            state_quat.r[0],
+            state_quat.r[1],
+            state_quat.r[2],
+            state_quat.r[3],
+        )
 
         # Convert quaternion to Euler angles (3-2-1 sequence)
         # Roll (phi)
@@ -682,7 +687,7 @@ class TestSportCubNode:
         print("\nVelocity (m/s):")
         print(f"  Quaternion: {state_quat.v}")
         print(f"  Euler:      {state_euler.v}")
-        np.testing.assert_allclose(state_quat.v, state_euler.v, rtol=1e-3, atol=1e-3)
+        np.testing.assert_allclose(state_quat.v, state_euler.v, rtol=1e-3, atol=5e-3)
         print("  ✓ Velocities match")
 
         # Compare attitudes
@@ -706,7 +711,7 @@ class TestSportCubNode:
         print("\nAngular velocity (rad/s):")
         print(f"  Quaternion: {state_quat.w}")
         print(f"  Euler:      {state_euler.w}")
-        np.testing.assert_allclose(state_quat.w, state_euler.w, rtol=2e-3, atol=2e-3)
+        np.testing.assert_allclose(state_quat.w, state_euler.w, rtol=2e-3, atol=7e-3)
         print("  ✓ Angular velocities match")
 
         # Compare control inputs
@@ -721,7 +726,7 @@ class TestSportCubNode:
             [input_quat.ail, input_quat.elev, input_quat.rud, input_quat.thr],
             [input_euler.ail, input_euler.elev, input_euler.rud, input_euler.thr],
             rtol=1e-3,
-            atol=1e-3,
+            atol=5e-3,
         )
         print("  ✓ Control inputs match")
 

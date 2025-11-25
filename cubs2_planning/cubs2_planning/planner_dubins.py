@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 import rclpy
-from cubs2_planning.planner.dubins import DubinsPathType, derive_dubins
+from cyecca.planning.dubins import DubinsPathType, derive_dubins
 from geometry_msgs.msg import Point, PoseStamped, TransformStamped
 from nav_msgs.msg import Path
 from racecourse_description.factory import MarkerFactory
@@ -19,7 +19,7 @@ class DubinsGatePlannerNode(Node):
         self.declare_parameter(
             "racecourse_yaml", "package://racecourse_description/config/racecourse.yaml"
         )
-        self.declare_parameter("turn_radius", 3.0)
+        self.declare_parameter("turn_radius", 5.0)
         self.declare_parameter("sample_points", 200)
         self.declare_parameter("show_turn_circles", False)
         self.declare_parameter("show_gate_turn_circles", False)
