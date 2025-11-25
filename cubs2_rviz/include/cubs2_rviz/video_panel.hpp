@@ -1,17 +1,17 @@
 #ifndef CUBS2_RVIZ_VIDEO_PANEL_HPP
 #define CUBS2_RVIZ_VIDEO_PANEL_HPP
 
+#include <gst/app/gstappsink.h>
+#include <gst/gst.h>
 #include <QComboBox>
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMutex>
 #include <QPushButton>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <QMutex>
-#include <gst/gst.h>
-#include <gst/app/gstappsink.h>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/display_context.hpp>
@@ -77,7 +77,7 @@ private:
   bool initializeGStreamer();
   void cleanupGStreamer();
   bool createPipeline(const std::string& uri);
-  
+
   // Predefined video sources
   struct VideoSource {
     QString name;

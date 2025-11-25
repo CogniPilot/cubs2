@@ -93,7 +93,7 @@ def test_closed_loop_outputs():
     if hasattr(model, "_submodels") and "plant" in model._submodels:
         plant_submodel = model._submodels["plant"]
         print(f"    Plant has f_y: {hasattr(plant_submodel, 'f_y')}")
-        
+
         # Try to evaluate plant output directly
         # Get plant state slice
         if hasattr(model, "_submodel_state_slices"):
@@ -102,9 +102,10 @@ def test_closed_loop_outputs():
                 start, end = plant_slice
                 x_plant_vec = x_vec[start:end]
                 print(f"    Plant state slice: [{start}:{end}]")
-                
+
                 # What inputs does plant need?
                 from dataclasses import fields
+
                 u_plant = plant_submodel.u0
                 print(f"    Plant expects inputs: {[f.name for f in fields(u_plant)]}")
 
@@ -179,9 +180,7 @@ def test_compare_plant_vs_closed_loop():
     p_cl = cl_model.p0
 
     # Compute plant outputs
-    result_plant = plant.f_y(
-        x=x_plant.as_vec(), u=u_plant.as_vec(), p=p_plant.as_vec()
-    )
+    result_plant = plant.f_y(x=x_plant.as_vec(), u=u_plant.as_vec(), p=p_plant.as_vec())
     from cubs2_dynamics.sportcub import SportCubOutputs
 
     outputs_plant = SportCubOutputs.from_vec(result_plant["y"])
@@ -221,9 +220,7 @@ def test_compare_plant_vs_closed_loop():
     if F_plant_norm > 0.1:
         rel_error = abs(F_cl_norm - F_plant_norm) / F_plant_norm
         print(f"  Relative error:  {rel_error*100:.1f}%")
-        assert (
-            rel_error < 0.1
-        ), f"Force magnitudes differ by {rel_error*100:.1f}% (expected < 10%)"
+        assert rel_error < 0.1, f"Force magnitudes differ by {rel_error*100:.1f}% (expected < 10%)"
 
 
 def test_check_output_connections():

@@ -65,9 +65,10 @@ class SimNode(Node):
 
         # Initialize closed-loop model (composed aircraft + controller)
         self.model = closed_loop_sportcub()
-        
+
         # TEMPORARY: Also create plant-only model for pure manual mode demo
         from cubs2_dynamics.sportcub import sportcub
+
         self.cl_model = sportcub()
 
         # State and inputs for composed model
@@ -76,18 +77,18 @@ class SimNode(Node):
         self.x = copy.deepcopy(self.model.x0)  # Structured state with submodel access
         self.u = copy.deepcopy(self.model.u0)  # External inputs
         self.p = copy.deepcopy(self.model.p0)  # Parameters (empty for this model)
-        
+
         # Apply trim parameters from config to controller submodel
-        self.model._submodels['controller'].p0.trim_aileron = float(
+        self.model._submodels["controller"].p0.trim_aileron = float(
             self.get_parameter("controller.trim.aileron").value
         )
-        self.model._submodels['controller'].p0.trim_elevator = float(
+        self.model._submodels["controller"].p0.trim_elevator = float(
             self.get_parameter("controller.trim.elevator").value
         )
-        self.model._submodels['controller'].p0.trim_rudder = float(
+        self.model._submodels["controller"].p0.trim_rudder = float(
             self.get_parameter("controller.trim.rudder").value
         )
-        
+
         # Plant-only state/inputs
         self.x_cl = copy.deepcopy(self.cl_model.x0)
         self.u_cl = copy.deepcopy(self.cl_model.u0)
@@ -111,7 +112,7 @@ class SimNode(Node):
         self.x.plant.v[0] = 0.0  # Start from rest
         self.x.plant.v[1] = 0.0
         self.x.plant.v[2] = 0.0
-        
+
         # Also initialize plant-only state
         self.x_cl.p[2] = 0.1
         self.x_cl.v[0] = 0.0
@@ -156,13 +157,13 @@ class SimNode(Node):
         self.u.elev_manual = float(msg.elevator)
         self.u.thr_manual = float(msg.throttle)
         self.u.rud_manual = float(msg.rudder)
-        
+
         # TEMPORARY: Also update plant-only inputs for demo
         self.u_cl.ail = float(msg.aileron)
         self.u_cl.elev = float(msg.elevator)
         self.u_cl.thr = float(msg.throttle)
         self.u_cl.rud = float(msg.rudder)
-        
+
         # Debug: Log throttle input
         if abs(self.u.thr_manual) > 0.01:
             self.get_logger().info(
@@ -406,17 +407,17 @@ class SimNode(Node):
         self.get_logger().debug(f"sim time: {self.sim_time:.2f}s")
 
         # TEMPORARY: Use plant-only model in manual mode (mode=0) for demo
-        use_plant_only = (self.u.mode < 0.5)
-        
+        use_plant_only = self.u.mode < 0.5
+
         if use_plant_only:
             # Step plant-only model (pure manual, no controller)
             x_vec = self.x_cl.as_vec()
             u_vec = self.u_cl.as_vec()
             p_vec = self.p_cl.as_vec()
-            
+
             x_next = self.cl_model.f_step(x=x_vec, u=u_vec, p=p_vec, dt=self.dt)
             x_next_vec = x_next["x_next"]
-            
+
             # Check for NaN or invalid values
             if np.any(np.isnan(x_next_vec)) or np.any(np.isinf(x_next_vec)):
                 self.get_logger().error(
@@ -425,42 +426,44 @@ class SimNode(Node):
                 )
                 self.pause()
                 return
-            
+
             # Update plant state - manually unpack vector into state fields
             from dataclasses import fields
+
             offset = 0
             for field_obj in fields(self.x_cl):
                 field_val = getattr(self.x_cl, field_obj.name)
                 field_size = field_val.shape[0] if hasattr(field_val, "shape") else 1
                 setattr(self.x_cl, field_obj.name, x_next_vec[offset : offset + field_size])
                 offset += field_size
-            
+
             # Sync plant state to composed model (for when mode switches)
             self.x.plant = copy.deepcopy(self.x_cl)
-            
+
             # Compute outputs from plant
             if hasattr(self.cl_model, "f_y"):
                 result = self.cl_model.f_y(x=x_vec, u=u_vec, p=p_vec)
                 output_vec = result["y"]
-                
+
                 from cubs2_dynamics.sportcub import SportCubOutputs
+
                 outputs = SportCubOutputs.from_vec(output_vec)
-                
+
                 # Extract control commands (pass-through in manual mode)
                 self.ail_cmd = float(self.u_cl.ail)
                 self.elev_cmd = float(self.u_cl.elev)
                 self.rud_cmd = float(self.u_cl.rud)
                 self.thr_cmd = float(self.u_cl.thr)
-                
+
                 # Store forces/moments
                 self.last_outputs = outputs
-                
+
         else:
             # Use closed-loop model (aircraft + controller)
             # Sync plant state from manual mode if switching
-            if hasattr(self, '_was_plant_only') and self._was_plant_only:
+            if hasattr(self, "_was_plant_only") and self._was_plant_only:
                 self.x.plant = copy.deepcopy(self.x_cl)
-            
+
             # Convert structured state to vector for integration
             x_vec = self.model._state_to_vec(self.x)
             u_vec = self.u.as_vec()
@@ -480,7 +483,7 @@ class SimNode(Node):
 
             # Convert vector back to structured state
             self.x = self.model._vec_to_state(x_next_vec)
-            
+
             # Sync back to plant state
             self.x_cl = copy.deepcopy(self.x.plant)
 
@@ -491,6 +494,7 @@ class SimNode(Node):
                     output_vec = result["y"]
 
                     from cubs2_control.closed_loop import ClosedLoopOutputs
+
                     outputs = ClosedLoopOutputs.from_vec(output_vec)
 
                     # Extract control commands for joint state visualization
@@ -498,7 +502,7 @@ class SimNode(Node):
                     self.elev_cmd = float(outputs.elev)
                     self.rud_cmd = float(outputs.rud)
                     self.thr_cmd = float(outputs.thr)
-                    
+
                     # Store forces/moments for visualization
                     self.last_outputs = type(
                         "obj",
@@ -514,8 +518,11 @@ class SimNode(Node):
                     )()
                 except Exception as e:
                     import traceback
-                    self.get_logger().warn(f"Failed to compute outputs: {e}\n{traceback.format_exc()}")
-        
+
+                    self.get_logger().warn(
+                        f"Failed to compute outputs: {e}\n{traceback.format_exc()}"
+                    )
+
         self._was_plant_only = use_plant_only
 
         # Publish joint states every step
@@ -688,7 +695,7 @@ class SimNode(Node):
         self.x.plant.v[0] = 0.0
         self.x.plant.v[1] = 0.0
         self.x.plant.v[2] = 0.0
-        
+
         # Also reset plant-only state
         self.x_cl.p[2] = 0.1
         self.x_cl.v[0] = 0.0
@@ -697,7 +704,7 @@ class SimNode(Node):
 
         self.u.thr_manual = 0.0
         self.u.elev_manual = 0.0
-        
+
         # Reset plant-only inputs
         self.u_cl.thr = 0.0
         self.u_cl.elev = 0.0

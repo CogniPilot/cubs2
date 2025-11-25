@@ -37,7 +37,7 @@ class SportCubStatesQuat:
 @symbolic
 class SportCubStatesEuler:
     """Euler angle representation.
-    
+
     Note: Angular velocity w follows FLU convention (p, q, r).
     Euler angles r = [psi, theta, phi] follow aeronautical convention:
     - phi (roll): positive = right wing down
@@ -51,6 +51,7 @@ class SportCubStatesEuler:
     v: ca.SX = state(3, [0, 0, 0], "velocity in earth frame ENU (m/s)")
     r: ca.SX = state(3, [0, 0, 0], "Euler angles 3-2-1 [psi,theta,phi] rad")
     w: ca.SX = state(3, [0, 0, 0], "angular velocity in body frame FLU [p,q,r] (rad/s)")
+
 
 # Union type for functions that work with both representations
 SportCubStates = Union[SportCubStatesQuat, SportCubStatesEuler]

@@ -1836,7 +1836,9 @@ class ModelSX(Generic[TState, TInput, TParam]):
                                             if fld.name == src_field:
                                                 fld_val = getattr(src_submodel.y, fld.name)
                                                 fld_size = (
-                                                    fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                                    fld_val.shape[0]
+                                                    if hasattr(fld_val, "shape")
+                                                    else 1
                                                 )
                                                 u_sub_dict[field_name] = src_y_vec[
                                                     offset : offset + fld_size
@@ -1845,11 +1847,15 @@ class ModelSX(Generic[TState, TInput, TParam]):
                                             else:
                                                 fld_val = getattr(src_submodel.y, fld.name)
                                                 fld_size = (
-                                                    fld_val.shape[0] if hasattr(fld_val, "shape") else 1
+                                                    fld_val.shape[0]
+                                                    if hasattr(fld_val, "shape")
+                                                    else 1
                                                 )
                                                 offset += fld_size
                                         else:
-                                            u_sub_dict[field_name] = getattr(submodel.u0, field_name)
+                                            u_sub_dict[field_name] = getattr(
+                                                submodel.u0, field_name
+                                            )
                                     else:
                                         u_sub_dict[field_name] = getattr(submodel.u0, field_name)
                                 else:
@@ -1939,12 +1945,20 @@ class ModelSX(Generic[TState, TInput, TParam]):
         composite_fields = []
         for name, submodel in self._submodels.items():
             # Each field holds a copy of the submodel's state dataclass
-            composite_fields.append((name, type(submodel.x0), dc_field(default_factory=lambda sm=submodel: copy.deepcopy(sm.x0))))
+            composite_fields.append(
+                (
+                    name,
+                    type(submodel.x0),
+                    dc_field(default_factory=lambda sm=submodel: copy.deepcopy(sm.x0)),
+                )
+            )
 
         # Create composite state dataclass with as_vec() and from_vec() methods
         def _as_vec(self_state):
             """Convert structured state to flat vector."""
-            return ca.vertcat(*[getattr(self_state, name).as_vec() for name in self._submodels.keys()])
+            return ca.vertcat(
+                *[getattr(self_state, name).as_vec() for name in self._submodels.keys()]
+            )
 
         def _from_vec(cls, x_vec):
             """Convert flat vector to structured state."""
@@ -1958,9 +1972,9 @@ class ModelSX(Generic[TState, TInput, TParam]):
 
         # Create the composite state dataclass
         ComposedState = make_dataclass(
-            'ComposedState',
+            "ComposedState",
             composite_fields,
-            namespace={'as_vec': _as_vec, 'from_vec': classmethod(_from_vec)}
+            namespace={"as_vec": _as_vec, "from_vec": classmethod(_from_vec)},
         )
 
         # Create initial state instance

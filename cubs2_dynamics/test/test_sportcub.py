@@ -660,16 +660,12 @@ class TestSportCubNode:
 
         # Convert quaternion to Euler angles (3-2-1 sequence)
         # Roll (phi)
-        phi_from_quat = np.arctan2(
-            2 * (qw * qx + qy * qz), 1 - 2 * (qx * qx + qy * qy)
-        )
+        phi_from_quat = np.arctan2(2 * (qw * qx + qy * qz), 1 - 2 * (qx * qx + qy * qy))
         # Pitch (theta)
         sin_theta = 2 * (qw * qy - qz * qx)
         theta_from_quat = np.arcsin(np.clip(sin_theta, -1.0, 1.0))
         # Yaw (psi)
-        psi_from_quat = np.arctan2(
-            2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz)
-        )
+        psi_from_quat = np.arctan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz))
 
         print("\n" + "=" * 80)
         print("COMPARISON RESULTS")
@@ -691,8 +687,12 @@ class TestSportCubNode:
 
         # Compare attitudes
         print("\nAttitude (deg):")
-        print(f"  From Quat:  phi={np.degrees(phi_from_quat):.3f}°, theta={np.degrees(theta_from_quat):.3f}°, psi={np.degrees(psi_from_quat):.3f}°")
-        print(f"  Euler:      phi={np.degrees(state_euler.r[2]):.3f}°, theta={np.degrees(state_euler.r[1]):.3f}°, psi={np.degrees(state_euler.r[0]):.3f}°")
+        print(
+            f"  From Quat:  phi={np.degrees(phi_from_quat):.3f}°, theta={np.degrees(theta_from_quat):.3f}°, psi={np.degrees(psi_from_quat):.3f}°"
+        )
+        print(
+            f"  Euler:      phi={np.degrees(state_euler.r[2]):.3f}°, theta={np.degrees(state_euler.r[1]):.3f}°, psi={np.degrees(state_euler.r[0]):.3f}°"
+        )
         # Note: Euler state is [psi, theta, phi] order
         np.testing.assert_allclose(
             [phi_from_quat, theta_from_quat, psi_from_quat],
@@ -711,8 +711,12 @@ class TestSportCubNode:
 
         # Compare control inputs
         print("\nControl inputs:")
-        print(f"  Quaternion: ail={input_quat.ail:.4f}, elev={input_quat.elev:.4f}, rud={input_quat.rud:.4f}, thr={input_quat.thr:.4f}")
-        print(f"  Euler:      ail={input_euler.ail:.4f}, elev={input_euler.elev:.4f}, rud={input_euler.rud:.4f}, thr={input_euler.thr:.4f}")
+        print(
+            f"  Quaternion: ail={input_quat.ail:.4f}, elev={input_quat.elev:.4f}, rud={input_quat.rud:.4f}, thr={input_quat.thr:.4f}"
+        )
+        print(
+            f"  Euler:      ail={input_euler.ail:.4f}, elev={input_euler.elev:.4f}, rud={input_euler.rud:.4f}, thr={input_euler.thr:.4f}"
+        )
         np.testing.assert_allclose(
             [input_quat.ail, input_quat.elev, input_quat.rud, input_quat.thr],
             [input_euler.ail, input_euler.elev, input_euler.rud, input_euler.thr],
@@ -722,14 +726,24 @@ class TestSportCubNode:
         print("  ✓ Control inputs match")
 
         # Compare outputs (forces, moments, aerodynamics)
-        outputs_quat = self._extract_outputs(model_quat, x_trim_quat, u_trim_quat, model_quat.p0.as_vec())
-        outputs_euler = self._extract_outputs(model_euler, x_trim_euler, u_trim_euler, model_euler.p0.as_vec())
+        outputs_quat = self._extract_outputs(
+            model_quat, x_trim_quat, u_trim_quat, model_quat.p0.as_vec()
+        )
+        outputs_euler = self._extract_outputs(
+            model_euler, x_trim_euler, u_trim_euler, model_euler.p0.as_vec()
+        )
 
         print("\nAerodynamic outputs:")
-        print(f"  Quaternion: Vt={outputs_quat.Vt:.3f} m/s, alpha={np.degrees(outputs_quat.alpha):.3f}°, CL={outputs_quat.CL:.4f}, CD={outputs_quat.CD:.4f}")
-        print(f"  Euler:      Vt={outputs_euler.Vt:.3f} m/s, alpha={np.degrees(outputs_euler.alpha):.3f}°, CL={outputs_euler.CL:.4f}, CD={outputs_euler.CD:.4f}")
+        print(
+            f"  Quaternion: Vt={outputs_quat.Vt:.3f} m/s, alpha={np.degrees(outputs_quat.alpha):.3f}°, CL={outputs_quat.CL:.4f}, CD={outputs_quat.CD:.4f}"
+        )
+        print(
+            f"  Euler:      Vt={outputs_euler.Vt:.3f} m/s, alpha={np.degrees(outputs_euler.alpha):.3f}°, CL={outputs_euler.CL:.4f}, CD={outputs_euler.CD:.4f}"
+        )
         np.testing.assert_allclose(outputs_quat.Vt, outputs_euler.Vt, rtol=1e-3)
-        np.testing.assert_allclose(outputs_quat.alpha, outputs_euler.alpha, rtol=1e-2, atol=np.deg2rad(0.5))
+        np.testing.assert_allclose(
+            outputs_quat.alpha, outputs_euler.alpha, rtol=1e-2, atol=np.deg2rad(0.5)
+        )
         np.testing.assert_allclose(outputs_quat.CL, outputs_euler.CL, rtol=1e-3)
         np.testing.assert_allclose(outputs_quat.CD, outputs_euler.CD, rtol=1e-3)
         print("  ✓ Aerodynamic outputs match")
@@ -750,14 +764,19 @@ class TestSportCubNode:
         A_euler, B_euler = linearize_dynamics(model_euler, x_trim_euler, u_trim_euler)
 
         print(f"\nState space dimensions:")
-        print(f"  Quaternion: A is {A_quat.shape[0]}x{A_quat.shape[1]} (13 states: p[3], v[3], q[4], w[3])")
-        print(f"  Euler:      A is {A_euler.shape[0]}x{A_euler.shape[1]} (12 states: p[3], v[3], r[3], w[3])")
+        print(
+            f"  Quaternion: A is {A_quat.shape[0]}x{A_quat.shape[1]} (13 states: p[3], v[3], q[4], w[3])"
+        )
+        print(
+            f"  Euler:      A is {A_euler.shape[0]}x{A_euler.shape[1]} (12 states: p[3], v[3], r[3], w[3])"
+        )
 
         # Analyze modes for both representations
         state_names_quat = getattr(model_quat, "state_names", None)
         if not state_names_quat:
             state_names_quat = [
-                n for n, _ in sorted(
+                n
+                for n, _ in sorted(
                     getattr(model_quat, "state_index", {}).items(),
                     key=lambda kv: kv[1],
                 )
@@ -766,7 +785,8 @@ class TestSportCubNode:
         state_names_euler = getattr(model_euler, "state_names", None)
         if not state_names_euler:
             state_names_euler = [
-                n for n, _ in sorted(
+                n
+                for n, _ in sorted(
                     getattr(model_euler, "state_index", {}).items(),
                     key=lambda kv: kv[1],
                 )
@@ -807,10 +827,14 @@ class TestSportCubNode:
                 continue
             elif mode_q is None:
                 print("  Quaternion: NOT IDENTIFIED")
-                print(f"  Euler:      λ={mode_e['eigenvalue_continuous']:.4f}, τ={mode_e['time_constant']:.3f}s")
+                print(
+                    f"  Euler:      λ={mode_e['eigenvalue_continuous']:.4f}, τ={mode_e['time_constant']:.3f}s"
+                )
                 continue
             elif mode_e is None:
-                print(f"  Quaternion: λ={mode_q['eigenvalue_continuous']:.4f}, τ={mode_q['time_constant']:.3f}s")
+                print(
+                    f"  Quaternion: λ={mode_q['eigenvalue_continuous']:.4f}, τ={mode_q['time_constant']:.3f}s"
+                )
                 print("  Euler:      NOT IDENTIFIED")
                 continue
 
@@ -827,32 +851,32 @@ class TestSportCubNode:
             print(f"    Quaternion: {mode_q['damping_ratio']:.4f}")
             print(f"    Euler:      {mode_e['damping_ratio']:.4f}")
 
-            if mode_q['is_oscillatory'] and mode_e['is_oscillatory']:
+            if mode_q["is_oscillatory"] and mode_e["is_oscillatory"]:
                 print(f"  Frequency:")
                 print(f"    Quaternion: {mode_q['frequency_hz']:.4f} Hz")
                 print(f"    Euler:      {mode_e['frequency_hz']:.4f} Hz")
 
                 # Check that frequencies match closely (should be identical for physical modes)
-                freq_diff = abs(mode_q['frequency_hz'] - mode_e['frequency_hz'])
-                freq_rel_diff = freq_diff / max(mode_q['frequency_hz'], 1e-6)
+                freq_diff = abs(mode_q["frequency_hz"] - mode_e["frequency_hz"])
+                freq_rel_diff = freq_diff / max(mode_q["frequency_hz"], 1e-6)
                 if freq_rel_diff > 0.05:  # 5% tolerance
                     print(f"    ⚠ WARNING: Frequency mismatch {freq_rel_diff*100:.1f}%")
                 else:
                     print(f"    ✓ Frequencies match (diff: {freq_rel_diff*100:.2f}%)")
 
             # Check that time constants match
-            tc_diff = abs(mode_q['time_constant'] - mode_e['time_constant'])
-            tc_rel_diff = tc_diff / max(mode_q['time_constant'], 1e-6)
+            tc_diff = abs(mode_q["time_constant"] - mode_e["time_constant"])
+            tc_rel_diff = tc_diff / max(mode_q["time_constant"], 1e-6)
             if tc_rel_diff > 0.05:  # 5% tolerance
                 print(f"  ⚠ WARNING: Time constant mismatch {tc_rel_diff*100:.1f}%")
             else:
                 print(f"  ✓ Time constants match (diff: {tc_rel_diff*100:.2f}%)")
 
             # Check stability agreement
-            if mode_q['stable'] != mode_e['stable']:
+            if mode_q["stable"] != mode_e["stable"]:
                 print(f"  ⚠ WARNING: Stability disagreement!")
             else:
-                stable_str = "stable" if mode_q['stable'] else "UNSTABLE"
+                stable_str = "stable" if mode_q["stable"] else "UNSTABLE"
                 print(f"  ✓ Both {stable_str}")
 
         print("\n" + "=" * 80)
