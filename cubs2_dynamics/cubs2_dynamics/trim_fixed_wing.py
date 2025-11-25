@@ -38,8 +38,8 @@ def find_trim_fixed_wing(
     """
     import copy
 
-    from cubs2_dynamics.linearize import find_trim as find_trim_generic
-    from cubs2_dynamics.linearize import print_trim_details
+    from cyecca.dynamics.linearize import find_trim as find_trim_generic
+    from cyecca.dynamics.linearize import print_trim_details
 
     # Use defaults if not specified
     if gamma is not None:

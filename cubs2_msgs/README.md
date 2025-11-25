@@ -1,6 +1,8 @@
 # cubs2_msgs
 
-ROS2 message definitions for Cubs2 aircraft control and telemetry.
+ROS2 message definitions for aircraft control and telemetry.
+
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_msgs.html)**
 
 ## Messages
 

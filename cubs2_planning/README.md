@@ -1,6 +1,8 @@
 # cubs2_planning
 
-Path planning algorithms for autonomous flight of the Cubs2 SportCub aircraft.
+Dubins path planning for autonomous fixed-wing flight.
+
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_planning.html)**
 
 ## Features
 

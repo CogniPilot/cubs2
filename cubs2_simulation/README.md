@@ -1,6 +1,8 @@
 # cubs2_simulation
 
-Simulation runtime nodes for the Cubs2 SportCub aircraft. This package contains the ROS2-specific simulation nodes that integrate dynamics and control.
+Simulation runtime nodes integrating dynamics and control.
+
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_simulation.html)**
 
 ## Nodes
 

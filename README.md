@@ -2,10 +2,13 @@
 
 [![CI](https://github.com/jgoppert/cubs2/actions/workflows/ci.yml/badge.svg)](https://github.com/jgoppert/cubs2/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-62%25-orange)](https://github.com/jgoppert/cubs2)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue)](https://cognipilot.github.io/cubs2/)
 
 ![Figure-8 Racecourse](racecourse_description/images/figure8.png)
 
 A ROS2 Jazzy monorepo for simulating and controlling fixed-wing aircraft using the SportCub aircraft model. This workspace provides complete simulation, visualization, planning, and control capabilities for autonomous fixed-wing aircraft.
+
+📚 **[Full Documentation](https://cognipilot.github.io/cubs2/)** | [Installation Guide](docs/user_guide/installation.rst) | [Quick Start](docs/user_guide/quickstart.rst)
 
 ## Packages
 
@@ -83,10 +86,6 @@ ros2 launch cubs2_bringup sim.xml enable_replay:=true
 
 # Adjust playback speed
 ros2 launch cubs2_bringup sim.xml enable_replay:=true rate:=2.0
-
-# Download rosbag data (if needed)
-cd install/cubs2_data/share/cubs2_data/data
-./download_rosbags.sh
 ```
 
 ## Topics

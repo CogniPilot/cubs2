@@ -1,6 +1,8 @@
 # cubs2_dynamics
 
-Aircraft dynamics modeling and analysis tools for Cubs2. This package provides pure analysis and modeling capabilities with **no ROS dependencies**, making it reusable in non-ROS contexts.
+Aircraft dynamics modeling and analysis tools for Cubs2.
+
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_dynamics.html)**
 
 ## Features
 

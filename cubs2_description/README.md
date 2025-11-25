@@ -2,6 +2,8 @@
 
 URDF models and visual meshes for the Cubs2 SportCub aircraft.
 
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_description.html)**
+
 ## Contents
 
 ### URDF Models

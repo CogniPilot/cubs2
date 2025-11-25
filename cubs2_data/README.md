@@ -1,52 +1,38 @@
 # cubs2_data
 
-Data files for Cubs2 including rosbag recordings and reference flight data.
+Data files for Cubs2 including rosbag recordings and configuration.
 
-## Contents
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_data.html)**
 
-### Rosbag Recordings
+## Quick Start
 
-- `data/cub_stabilize_2025-10-21.mcap` - Stabilized flight test data
-
-### Download Script
+### List Available Rosbag Files
 
 ```bash
-cd data/
-./download_rosbags.sh
+cd $(ros2 pkg prefix cubs2_data)/share/cubs2_data/data
+./download_rosbags.py --list
 ```
 
-The script automatically downloads missing rosbag files from the repository.
+### Download Specific Files
 
-## Usage
+```bash
+# Download a specific file
+./download_rosbags.py cub_stabilize_2025-10-21.mcap
+
+# Download multiple files
+./download_rosbags.py cub_stabilize_2025-10-21.mcap cub_stabilize_2025_11_13.mcap
+
+# Download all files matching pattern
+./download_rosbags.py cub_stabilize_*.mcap
+
+# Download all available files
+./download_rosbags.py --all
+```
 
 ### Replay a Rosbag
 
 ```bash
-ros2 bag play $(ros2 pkg prefix cubs2_data)/share/cubs2_data/data/cub_stabilize_2025-10-21.mcap
+ros2 bag play cub_stabilize_2025-10-21.mcap
 ```
 
-### Use in Launch File
 
-```python
-from ament_index_python.packages import get_package_share_directory
-import os
-
-data_path = get_package_share_directory('cubs2_data')
-bag_file = os.path.join(data_path, 'data', 'cub_stabilize_2025-10-21.mcap')
-```
-
-### Replay with Simulation
-
-See `cubs2_bringup` package for launching replay mode:
-
-```bash
-ros2 launch cubs2_bringup sim.xml enable_replay:=true
-```
-
-## File Format
-
-All recordings use the MCAP format (.mcap), which is the ROS2 Jazzy default rosbag format.
-
-## License
-
-Apache-2.0

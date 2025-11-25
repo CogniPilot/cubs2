@@ -1,6 +1,8 @@
 # cubs2_control
 
-Control algorithms for Cubs2 aircraft. These controllers are designed to be reusable across both simulation and real hardware.
+Control algorithms for Cubs2 aircraft. Platform-agnostic controllers for simulation and hardware.
+
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_control.html)**
 
 ## Features
 

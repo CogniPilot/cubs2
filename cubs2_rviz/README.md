@@ -1,6 +1,8 @@
 # cubs2_rviz
 
-Custom RViz2 panel plugins for Cubs2 aircraft simulation and control.
+Custom RViz2 panels including low-latency GStreamer video streaming.
+
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_rviz.html)**
 
 ## Plugins
 

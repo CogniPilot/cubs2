@@ -1,6 +1,8 @@
 # cubs2_bringup
 
-System-level launch files and configuration for Cubs2. This package orchestrates all components for complete simulation, visualization, and planning.
+System-level launch files orchestrating simulation, visualization, and planning.
+
+**📚 [Full Documentation](https://cognipilot.github.io/cubs2/packages/cubs2_bringup.html)**
 
 ## Launch Files
 
