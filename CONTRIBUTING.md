@@ -25,20 +25,32 @@ We are committed to providing a welcoming and inclusive environment for all cont
 
 ## Coding Standards
 
+This project follows standard ROS 2 coding practices with automated linting.
+
 ### Python Code
 
-- Follow PEP 8 style guide
-- Use `ament_flake8` for linting (all code must pass with default configuration)
+- Follow PEP 8 style guide (enforced by `ament_flake8`)
+- Use NumPy-style docstrings (enforced by `ament_pep257`)
 - Maximum line length: 99 characters
-- Use double quotes for strings (unless escaping is needed)
-- Remove unused imports and variables
-- Add blank line after class docstrings
+- All code must pass `ament_flake8` and `ament_pep257` with default configuration
 
 ### C++ Code
 
-- Follow ROS 2 C++ style guide
-- Use `ament_lint_auto` for automated linting
+- Follow ROS 2 C++ style guide (enforced by `ament_cpplint` and `ament_uncrustify`)
+- Use consistent formatting and naming conventions
 - Include copyright headers on all files
+
+### Linting
+
+All linting is configured in each package's `package.xml` and automatically runs via `colcon test`:
+
+- `ament_copyright` - Validates license headers
+- `ament_flake8` - Python style checking
+- `ament_pep257` - Python docstring validation
+- `ament_cpplint` - C++ style checking
+- `ament_uncrustify` - C++ code formatting
+- `ament_lint_cmake` - CMake linting
+- `ament_xmllint` - XML validation
 
 ### Copyright Headers
 
@@ -80,10 +92,15 @@ All source files must include the Apache 2.0 license header:
 
 ## Testing
 
-- All changes must pass existing tests
+- All changes must pass existing tests and linting
 - Add new tests for new functionality
 - Run tests using: `colcon test --packages-select <package_name>`
-- Verify linting: `ament_flake8` (for Python) or `ament_lint_auto` (configured in packages)
+- View test results: `colcon test-result --verbose`
+
+Linting is automatically included in `colcon test` for all packages. All linters must pass:
+- Python: `ament_flake8`, `ament_pep257`, `ament_copyright`
+- C++: `ament_cpplint`, `ament_uncrustify`, `ament_copyright`
+- Build files: `ament_lint_cmake`, `ament_xmllint`
 
 ## Building
 

@@ -80,13 +80,16 @@ class PIDOutputs:
 
 @beartype
 def pid_controller() -> ModelSX:
-    """Create PID rate controller.
+    """
+    Create PID rate controller.
 
     A multi-axis PID controller for aircraft rate control.
     Controls roll, pitch, yaw rates and airspeed using PID feedback.
 
-    Returns:
+    Returns
+    -------
         ModelSX: PID controller model with integral states and control outputs
+
     """
     model = ModelSX.create(PIDStates, PIDInputs,
                            PIDParams, output_type=PIDOutputs)

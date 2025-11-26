@@ -26,26 +26,29 @@
 #include <rviz_common/panel.hpp>
 #include <std_msgs/msg/float32.hpp>
 
-namespace cubs2 {
+namespace cubs2
+{
 
 // Custom 2D joystick widget for aileron/elevator control
 class JoystickWidget : public QWidget {
   Q_OBJECT
 
- public:
-  explicit JoystickWidget(QWidget* parent = nullptr);
-  QSize sizeHint() const override { return QSize(200, 200); }
+public:
+  explicit JoystickWidget(QWidget * parent = nullptr);
+  QSize sizeHint() const override {return QSize(200, 200);}
 
-  double getAileron() const { return aileron_; }    // -1 to 1
-  double getElevator() const { return elevator_; }  // -1 to 1
+  double getAileron() const {return aileron_;}      // -1 to 1
+  double getElevator() const {return elevator_;}    // -1 to 1
 
-  void setTrim(double ail_trim, double elev_trim) {
+  void setTrim(double ail_trim, double elev_trim)
+  {
     aileron_trim_ = ail_trim;
     elevator_trim_ = elev_trim;
     update();
   }
 
-  void reset() {
+  void reset()
+  {
     aileron_ = 0.0;
     elevator_ = 0.0;
     aileron_trim_ = 0.0;
@@ -53,7 +56,8 @@ class JoystickWidget : public QWidget {
     update();
   }
 
-  void setPosition(double aileron, double elevator) {
+  void setPosition(double aileron, double elevator)
+  {
     aileron_ = aileron;
     elevator_ = elevator;
     update();
@@ -63,16 +67,16 @@ Q_SIGNALS:
   void joystickMoved(double aileron, double elevator);
 
 protected:
-  void paintEvent(QPaintEvent* event) override;
-  void mousePressEvent(QMouseEvent* event) override;
-  void mouseMoveEvent(QMouseEvent* event) override;
-  void mouseReleaseEvent(QMouseEvent* event) override;
+  void paintEvent(QPaintEvent * event) override;
+  void mousePressEvent(QMouseEvent * event) override;
+  void mouseMoveEvent(QMouseEvent * event) override;
+  void mouseReleaseEvent(QMouseEvent * event) override;
 
 private Q_SLOTS:
   void springBackStep();
 
 private:
-  void updatePosition(const QPoint& pos);
+  void updatePosition(const QPoint & pos);
   void startSpringBack();
 
   double aileron_{0.0};   // -1 (left) to +1 (right)
@@ -80,14 +84,14 @@ private:
   double aileron_trim_{0.0};
   double elevator_trim_{0.0};
   bool dragging_{false};
-  QTimer* spring_timer_{nullptr};
+  QTimer * spring_timer_{nullptr};
 };
 
 class JoyPanel : public rviz_common::Panel {
   Q_OBJECT
 
- public:
-  explicit JoyPanel(QWidget* parent = nullptr);
+public:
+  explicit JoyPanel(QWidget * parent = nullptr);
   ~JoyPanel() override;
 
 private Q_SLOTS:
@@ -107,20 +111,20 @@ private:
 
 private:
   // Virtual joystick controls
-  JoystickWidget* joystick_{nullptr};
-  QSlider* throttle_slider_{nullptr};
-  QSlider* rudder_slider_{nullptr};
-  QSlider* aileron_trim_slider_{nullptr};
-  QSlider* elevator_trim_slider_{nullptr};
-  QLabel* throttle_label_{nullptr};
-  QLabel* rudder_label_{nullptr};
-  QLabel* aileron_trim_label_{nullptr};
-  QLabel* elevator_trim_label_{nullptr};
-  QTimer* control_timer_{nullptr};
-  QTimer* ros_spin_timer_{nullptr};
-  QPushButton* reset_button_{nullptr};
-  QCheckBox* enable_checkbox_{nullptr};
-  QComboBox* mode_combo_{nullptr};
+  JoystickWidget * joystick_{nullptr};
+  QSlider * throttle_slider_{nullptr};
+  QSlider * rudder_slider_{nullptr};
+  QSlider * aileron_trim_slider_{nullptr};
+  QSlider * elevator_trim_slider_{nullptr};
+  QLabel * throttle_label_{nullptr};
+  QLabel * rudder_label_{nullptr};
+  QLabel * aileron_trim_label_{nullptr};
+  QLabel * elevator_trim_label_{nullptr};
+  QTimer * control_timer_{nullptr};
+  QTimer * ros_spin_timer_{nullptr};
+  QPushButton * reset_button_{nullptr};
+  QCheckBox * enable_checkbox_{nullptr};
+  QComboBox * mode_combo_{nullptr};
 
   double aileron_{0.0};
   double elevator_{0.0};

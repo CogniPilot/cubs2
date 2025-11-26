@@ -28,25 +28,36 @@ def find_trim_fixed_wing(
     verbose: bool = False,
     ipopt_print_level: int = 5,
 ) -> tuple[np.ndarray, np.ndarray, dict | None]:
-    """Fixed-wing aircraft trim for steady level or descending flight.
+    """
+    Fixed-wing aircraft trim for steady level or descending flight.
 
     This is a convenience wrapper around the generic trim solver with
     aircraft-specific cost function and constraints for level flight.
 
-    Args:
-        model: Aircraft model instance
-        V_target: Target airspeed (m/s). If None, solver finds natural equilibrium speed.
-                  For glide (fix_throttle=True), natural equilibrium corresponds to max L/D.
-        gamma: Flight path angle (rad). If None, solver finds natural equilibrium angle.
-        print_progress: Print optimization progress
-        fix_throttle: If True, throttle is fixed at 0 (glide)
-        verbose: Print detailed trim solution
-        ipopt_print_level: IPOPT solver verbosity (0-12)
+    Parameters
+    ----------
+    model : ModelSX
+        Aircraft model instance
+    V_target : float, optional
+        Target airspeed (m/s). If None, solver finds natural equilibrium speed.
+        For glide (fix_throttle=True), natural equilibrium corresponds to max L/D.
+    gamma : float, optional
+        Flight path angle (rad). If None, solver finds natural equilibrium angle.
+    print_progress : bool
+        Print optimization progress
+    fix_throttle : bool
+        If True, throttle is fixed at 0 (glide)
+    verbose : bool
+        Print detailed trim solution
+    ipopt_print_level : int
+        IPOPT solver verbosity (0-12)
 
     Note:
+    ----
         When finding glide trim (fix_throttle=True) with V_target=None and gamma=None,
         the solver finds the natural equilibrium which corresponds to maximum L/D ratio.
         This is the best glide condition - no explicit L/D optimization is needed.
+
     """
     import copy
 
@@ -96,9 +107,11 @@ def find_trim_fixed_wing(
         p,  # Parameter dataclass instance (symbolic)
         x_dot,  # State derivative dataclass instance (symbolic)
     ) -> ca.MX | ca.SX:
-        """Aircraft-specific cost for level flight trim.
+        """
+        Aircraft-specific cost for level flight trim.
 
         All state/input variables are already wrapped in dataclass instances!
+
         """
         # Calculate outputs for aerodynamic coefficients
         y = model.output_type.from_vec(
@@ -140,10 +153,12 @@ def find_trim_fixed_wing(
         p,  # Parameter dataclass instance (symbolic)
         x_dot,  # State derivative dataclass instance (symbolic)
     ) -> list:
-        """Aircraft-specific constraints for level flight trim.
+        """
+        Aircraft-specific constraints for level flight trim.
 
         All state/input variables are already wrapped in dataclass instances!
         Returns list of constraint expressions.
+
         """
         constraints = []
 

@@ -5,12 +5,8 @@
   <version>1.0.0</version>
   <description>Launch files and system configuration for Cubs2</description>
   <maintainer email="james.goppert@gmail.com">James Goppert</maintainer>
-  <author email="james.goppert@gmail.com">James Goppert</author>
   <license>Apache-2.0</license>
-
-  <url type="website">https://github.com/jgoppert/cubs2</url>
-  <url type="repository">https://github.com/jgoppert/cubs2</url>
-  <url type="bugtracker">https://github.com/jgoppert/cubs2/issues</url>
+  <author email="james.goppert@gmail.com">James Goppert</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

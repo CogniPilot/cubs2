@@ -17,35 +17,43 @@
 
 #include <pluginlib/class_list_macros.hpp>
 
-namespace cubs2 {
+namespace cubs2
+{
 
 // ============================================================================
 // HUDWidget Implementation
 // ============================================================================
 
-HUDWidget::HUDWidget(QWidget* parent) : QWidget(parent) {
+HUDWidget::HUDWidget(QWidget * parent)
+: QWidget(parent)
+{
   setMinimumSize(400, 400);
   setStyleSheet("background-color: rgba(0, 0, 0, 180);");
 }
 
-void HUDWidget::setAttitude(double roll, double pitch, double yaw) {
+void HUDWidget::setAttitude(double roll, double pitch, double yaw)
+{
   roll_ = roll;
   pitch_ = pitch;
   yaw_ = yaw;
   update();
 }
 
-void HUDWidget::setAltitude(double altitude) {
+void HUDWidget::setAltitude(double altitude)
+{
   altitude_ = altitude;
   update();
 }
 
-void HUDWidget::setAirspeed(double airspeed) {
+void HUDWidget::setAirspeed(double airspeed)
+{
   airspeed_ = airspeed;
   update();
 }
 
-void HUDWidget::paintEvent(QPaintEvent* /* event */) {
+void HUDWidget::paintEvent(QPaintEvent * event)
+{
+  (void)event;
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
 
@@ -71,7 +79,8 @@ void HUDWidget::paintEvent(QPaintEvent* /* event */) {
   painter.drawLine(cx, cy - 10, cx, cy - 5);
 }
 
-void HUDWidget::drawHorizon(QPainter& painter, int cx, int cy, int size) {
+void HUDWidget::drawHorizon(QPainter & painter, int cx, int cy, int size)
+{
   painter.save();
 
   // Translate to center and apply roll rotation
@@ -108,7 +117,7 @@ void HUDWidget::drawHorizon(QPainter& painter, int cx, int cy, int size) {
   painter.setFont(font);
 
   for (int deg = -60; deg <= 60; deg += 10) {
-    if (deg == 0) continue;  // Skip horizon line
+    if (deg == 0) {continue;}  // Skip horizon line
 
     double rad = deg * M_PI / 180.0;
     int y = -pitch_offset - static_cast<int>(rad * pixels_per_rad);
@@ -129,7 +138,8 @@ void HUDWidget::drawHorizon(QPainter& painter, int cx, int cy, int size) {
   painter.restore();
 }
 
-void HUDWidget::drawRollIndicator(QPainter& painter, int cx, int cy, int size) {
+void HUDWidget::drawRollIndicator(QPainter & painter, int cx, int cy, int size)
+{
   painter.save();
   painter.translate(cx, cy);
 
@@ -176,7 +186,8 @@ void HUDWidget::drawRollIndicator(QPainter& painter, int cx, int cy, int size) {
   painter.restore();
 }
 
-void HUDWidget::drawText(QPainter& painter) {
+void HUDWidget::drawText(QPainter & painter)
+{
   QFont font = painter.font();
   font.setPixelSize(18);
   font.setBold(true);
@@ -210,8 +221,10 @@ void HUDWidget::drawText(QPainter& painter) {
 // HUDPanel Implementation
 // ============================================================================
 
-HUDPanel::HUDPanel(QWidget* parent) : rviz_common::Panel(parent) {
-  auto* layout = new QVBoxLayout;
+HUDPanel::HUDPanel(QWidget * parent)
+: rviz_common::Panel(parent)
+{
+  auto * layout = new QVBoxLayout;
 
   // Create HUD widget
   hud_widget_ = new HUDWidget(this);
@@ -234,19 +247,20 @@ HUDPanel::HUDPanel(QWidget* parent) : rviz_common::Panel(parent) {
   // Create timer for spinning ROS2 node (process callbacks in Qt thread)
   ros_spin_timer_ = new QTimer(this);
   ros_spin_timer_->setInterval(10);  // 100 Hz for responsive callbacks
-  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() { rclcpp::spin_some(node_); });
+  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() {rclcpp::spin_some(node_);});
   ros_spin_timer_->start();
 }
 
 HUDPanel::~HUDPanel() = default;
 
-void HUDPanel::onPoseReceived(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+void HUDPanel::onPoseReceived(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
+{
   // Extract altitude (z position)
   altitude_ = msg->pose.position.z;
 
   // Convert quaternion to Euler angles
   tf2::Quaternion q(msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z,
-                    msg->pose.orientation.w);
+    msg->pose.orientation.w);
 
   tf2::Matrix3x3 m(q);
   m.getRPY(roll_, pitch_, yaw_);
@@ -256,7 +270,8 @@ void HUDPanel::onPoseReceived(const geometry_msgs::msg::PoseStamped::SharedPtr m
   hud_widget_->setAltitude(altitude_);
 }
 
-void HUDPanel::onVelocityReceived(const geometry_msgs::msg::TwistStamped::SharedPtr msg) {
+void HUDPanel::onVelocityReceived(const geometry_msgs::msg::TwistStamped::SharedPtr msg)
+{
   // Calculate airspeed magnitude from velocity
   double vx = msg->twist.linear.x;
   double vy = msg->twist.linear.y;

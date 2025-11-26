@@ -12,12 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Test to investigate why closed-loop model doesn't produce forces/moments.
+"""
+Test to investigate why closed-loop model doesn't produce forces/moments.
 
 This test checks:
 1. Plant-only model outputs (working case)
 2. Closed-loop composed model outputs (broken case)
 3. Force/moment computation differences
+
 """
 import numpy as np
 import pytest

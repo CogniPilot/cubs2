@@ -137,15 +137,24 @@ class MarkerFactory:
             ns='line_strip',
             line_width=0.1,
             color=None):
-        """Create a LINE_STRIP marker from a list of points.
+        """
+        Create a LINE_STRIP marker from a list of points.
 
-        Args:
-            marker_id: Marker ID
-            points: List of Point objects or list of [x, y, z] coordinates
-            stamp: Optional timestamp for header
-            ns: Namespace for the marker
-            line_width: Width of the line (scale.x)
-            color: ColorRGBA object or None for default (white)
+        Parameters
+        ----------
+        marker_id : int
+            Marker ID
+        points : list
+            List of Point objects or list of [x, y, z] coordinates
+        stamp : Time, optional
+            Optional timestamp for header
+        ns : str
+            Namespace for the marker
+        line_width : float
+            Width of the line (scale.x)
+        color : ColorRGBA, optional
+            ColorRGBA object or None for default (white)
+
         """
         m = Marker()
         m.header = self.header(stamp)
@@ -180,17 +189,28 @@ class MarkerFactory:
         width=0.15,
         color=None,
     ):
-        """Create an ARROW marker using pose (good for heading visualization).
+        """
+        Create an ARROW marker using pose (good for heading visualization).
 
-        Args:
-            marker_id: Marker ID
-            position: [x, y, z] position
-            heading: Yaw angle in radians
-            stamp: Optional timestamp for header
-            ns: Namespace for the marker
-            length: Arrow length (scale.x)
-            width: Arrow width (scale.y and scale.z)
-            color: ColorRGBA object or None for default (green)
+        Parameters
+        ----------
+        marker_id : int
+            Marker ID
+        position : list
+            [x, y, z] position
+        heading : float
+            Yaw angle in radians
+        stamp : Time, optional
+            Optional timestamp for header
+        ns : str
+            Namespace for the marker
+        length : float
+            Arrow length (scale.x)
+        width : float
+            Arrow width (scale.y and scale.z)
+        color : ColorRGBA, optional
+            ColorRGBA object or None for default (green)
+
         """
         m = Marker()
         m.header = self.header(stamp)
@@ -222,18 +242,30 @@ class MarkerFactory:
         color=None,
         num_points=51,
     ):
-        """Create a circular LINE_STRIP marker.
+        """
+        Create a circular LINE_STRIP marker.
 
-        Args:
-            marker_id: Marker ID
-            center: [x, y] center position
-            radius: Circle radius
-            z: Height of the circle
-            stamp: Optional timestamp for header
-            ns: Namespace for the marker
-            line_width: Width of the line (scale.x)
-            color: ColorRGBA object or None for default (gray)
-            num_points: Number of points to approximate the circle
+        Parameters
+        ----------
+        marker_id : int
+            Marker ID
+        center : list
+            [x, y] center position
+        radius : float
+            Circle radius
+        z : float
+            Height of the circle
+        stamp : Time, optional
+            Optional timestamp for header
+        ns : str
+            Namespace for the marker
+        line_width : float
+            Width of the line (scale.x)
+        color : ColorRGBA, optional
+            ColorRGBA object or None for default (gray)
+        num_points : int
+            Number of points to approximate the circle
+
         """
         angles = np.linspace(0, 2 * np.pi, num_points)
         points = [

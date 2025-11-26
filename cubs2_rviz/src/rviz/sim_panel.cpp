@@ -14,10 +14,13 @@
 #include "cubs2_rviz/sim_panel.hpp"
 #include <pluginlib/class_list_macros.hpp>
 
-namespace cubs2 {
+namespace cubs2
+{
 
-SimPanel::SimPanel(QWidget* parent) : rviz_common::Panel(parent) {
-  auto* layout = new QVBoxLayout;
+SimPanel::SimPanel(QWidget * parent)
+: rviz_common::Panel(parent)
+{
+  auto * layout = new QVBoxLayout;
 
   // Reset button
   reset_button_ = new QPushButton("Reset Simulation");
@@ -73,27 +76,28 @@ SimPanel::SimPanel(QWidget* parent) : rviz_common::Panel(parent) {
   // Also listen for /reset from anywhere and reset UI controls accordingly
   reset_subscriber_ = node_->create_subscription<std_msgs::msg::Empty>(
       "/reset", 10, [this](const std_msgs::msg::Empty::SharedPtr /*msg*/) {
-        RCLCPP_INFO(node_->get_logger(), "SimPanel: /reset received -> resetting UI controls");
-        resetUiControls();
+      RCLCPP_INFO(node_->get_logger(), "SimPanel: /reset received -> resetting UI controls");
+      resetUiControls();
       });
 
   // Create timer for spinning ROS2 node (process callbacks in Qt thread)
   ros_spin_timer_ = new QTimer(this);
   ros_spin_timer_->setInterval(10);  // 100 Hz for responsive callbacks
-  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() { rclcpp::spin_some(node_); });
+  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() {rclcpp::spin_some(node_);});
   ros_spin_timer_->start();
 }
 
 SimPanel::~SimPanel() = default;
 
-void SimPanel::onInitialize() {
+void SimPanel::onInitialize()
+{
   RCLCPP_INFO(node_->get_logger(), "SimPanel::onInitialize() called");
   rviz_common::Panel::onInitialize();
   context_ = getDisplayContext();
 
   if (!camera_pos_publisher_) {
     camera_pos_publisher_ =
-        node_->create_publisher<geometry_msgs::msg::PointStamped>("/viz/camera_position", 10);
+      node_->create_publisher<geometry_msgs::msg::PointStamped>("/viz/camera_position", 10);
     RCLCPP_INFO(node_->get_logger(), "Created camera position publisher");
   }
 
@@ -111,7 +115,8 @@ void SimPanel::onInitialize() {
   RCLCPP_INFO(node_->get_logger(), "Published default speed/dt on startup");
 }
 
-void SimPanel::onResetButtonClicked() {
+void SimPanel::onResetButtonClicked()
+{
   std_msgs::msg::Empty msg;
   reset_publisher_->publish(msg);
   RCLCPP_INFO(node_->get_logger(), "Published /reset message");
@@ -119,16 +124,18 @@ void SimPanel::onResetButtonClicked() {
   dt_combo_->setCurrentIndex(2);
 }
 
-void SimPanel::onPauseToggled(bool checked) {
+void SimPanel::onPauseToggled(bool checked)
+{
   // The node currently toggles pause state on each /pause message.
   // Publishing here simply flips the state to match the checkbox.
   std_msgs::msg::Empty msg;
   pause_publisher_->publish(msg);
-  RCLCPP_INFO(node_->get_logger(), checked ? "Pause checkbox checked -> requesting pause"
-                                           : "Pause checkbox unchecked -> requesting resume");
+  RCLCPP_INFO(node_->get_logger(), checked ? "Pause checkbox checked -> requesting pause" :
+                                             "Pause checkbox unchecked -> requesting resume");
 }
 
-void SimPanel::onPausedMsg(const std_msgs::msg::Bool::SharedPtr msg) {
+void SimPanel::onPausedMsg(const std_msgs::msg::Bool::SharedPtr msg)
+{
   // Update checkbox to reflect actual paused state from the node.
   // Block signals to avoid echoing a /pause message back and creating a loop.
   bool old = pause_checkbox_->blockSignals(true);
@@ -143,7 +150,8 @@ void SimPanel::onPausedMsg(const std_msgs::msg::Bool::SharedPtr msg) {
   }
 }
 
-void SimPanel::onSpeedChanged(int index) {
+void SimPanel::onSpeedChanged(int index)
+{
   double speed = speed_combo_->itemData(index).toDouble();
   std_msgs::msg::Float64 msg;
   msg.data = speed;
@@ -151,7 +159,8 @@ void SimPanel::onSpeedChanged(int index) {
   RCLCPP_INFO(node_->get_logger(), "Set sim speed to %.2fx", speed);
 }
 
-void SimPanel::onDtChanged(int index) {
+void SimPanel::onDtChanged(int index)
+{
   double dt = dt_combo_->itemData(index).toDouble();
   std_msgs::msg::Float64 msg;
   msg.data = dt;
@@ -159,12 +168,13 @@ void SimPanel::onDtChanged(int index) {
   RCLCPP_INFO(node_->get_logger(), "Set time step to %.3fs", dt);
 }
 
-void SimPanel::publishCameraPosition() {
+void SimPanel::publishCameraPosition()
+{
   if (!context_ || !camera_pos_publisher_) {
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 5000,
                          "Cannot publish camera position: context_=%p, camera_pos_publisher_=%p",
-                         static_cast<void*>(context_),
-                         static_cast<void*>(camera_pos_publisher_.get()));
+                         static_cast<void *>(context_),
+                         static_cast<void *>(camera_pos_publisher_.get()));
     return;
   }
 
@@ -181,7 +191,7 @@ void SimPanel::publishCameraPosition() {
   }
 
   // Retrieve camera position from current view controller's Ogre camera
-  Ogre::Camera* cam = nullptr;
+  Ogre::Camera * cam = nullptr;
   try {
     cam = vc->getCamera();
   } catch (...) {
@@ -204,7 +214,8 @@ void SimPanel::publishCameraPosition() {
   camera_pos_publisher_->publish(msg);
 }
 
-void SimPanel::resetUiControls(bool emit_signals) {
+void SimPanel::resetUiControls(bool emit_signals)
+{
   // Restore default selections: speed=1x (index 2), dt=0.01s (index 3)
   // Optionally suppress signals if we don't want to publish set_speed/set_dt.
   if (!speed_combo_ || !dt_combo_) {

@@ -19,7 +19,8 @@
 #include <pluginlib/class_list_macros.hpp>
 #include "cubs2_msgs/msg/aircraft_control.hpp"
 
-namespace cubs2 {
+namespace cubs2
+{
 
 // ============================================================================
 // Joy Panel - Virtual Joystick Control
@@ -30,7 +31,9 @@ namespace cubs2 {
 // JoystickWidget Implementation
 // ============================================================================
 
-JoystickWidget::JoystickWidget(QWidget* parent) : QWidget(parent) {
+JoystickWidget::JoystickWidget(QWidget * parent)
+: QWidget(parent)
+{
   setMinimumSize(150, 150);
   setMouseTracking(false);
 
@@ -40,7 +43,9 @@ JoystickWidget::JoystickWidget(QWidget* parent) : QWidget(parent) {
   connect(spring_timer_, &QTimer::timeout, this, &JoystickWidget::springBackStep);
 }
 
-void JoystickWidget::paintEvent(QPaintEvent* /*event*/) {
+void JoystickWidget::paintEvent(QPaintEvent * event)
+{
+  (void)event;
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
 
@@ -72,7 +77,7 @@ void JoystickWidget::paintEvent(QPaintEvent* /*event*/) {
   // Draw joystick position
   int stick_x = cx + static_cast<int>(aileron_ * radius);
   int stick_y =
-      cy + static_cast<int>(elevator_ * radius);  // Positive elev = down on screen (pull back)
+    cy + static_cast<int>(elevator_ * radius);    // Positive elev = down on screen (pull back)
 
   painter.setBrush(QColor(255, 100, 100));
   painter.setPen(QPen(QColor(200, 50, 50), 2));
@@ -85,20 +90,23 @@ void JoystickWidget::paintEvent(QPaintEvent* /*event*/) {
                    QString("A: %1  E: %2").arg(aileron_, 0, 'f', 2).arg(elevator_, 0, 'f', 2));
 }
 
-void JoystickWidget::mousePressEvent(QMouseEvent* event) {
+void JoystickWidget::mousePressEvent(QMouseEvent * event)
+{
   if (event->button() == Qt::LeftButton) {
     dragging_ = true;
     updatePosition(event->pos());
   }
 }
 
-void JoystickWidget::mouseMoveEvent(QMouseEvent* event) {
+void JoystickWidget::mouseMoveEvent(QMouseEvent * event)
+{
   if (dragging_) {
     updatePosition(event->pos());
   }
 }
 
-void JoystickWidget::mouseReleaseEvent(QMouseEvent* event) {
+void JoystickWidget::mouseReleaseEvent(QMouseEvent * event)
+{
   if (event->button() == Qt::LeftButton) {
     dragging_ = false;
     // Start spring-back to center
@@ -106,11 +114,13 @@ void JoystickWidget::mouseReleaseEvent(QMouseEvent* event) {
   }
 }
 
-void JoystickWidget::startSpringBack() {
+void JoystickWidget::startSpringBack()
+{
   spring_timer_->start();
 }
 
-void JoystickWidget::springBackStep() {
+void JoystickWidget::springBackStep()
+{
   // Exponential decay toward zero with rate constant
   constexpr double decay_rate = 0.2;  // Higher = faster return
 
@@ -128,7 +138,8 @@ void JoystickWidget::springBackStep() {
   Q_EMIT joystickMoved(aileron_, elevator_);
 }
 
-void JoystickWidget::updatePosition(const QPoint& pos) {
+void JoystickWidget::updatePosition(const QPoint & pos)
+{
   int w = width();
   int h = height();
   int cx = w / 2;
@@ -138,7 +149,7 @@ void JoystickWidget::updatePosition(const QPoint& pos) {
   // Convert mouse position to -1..1 range
   double dx = (pos.x() - cx) / static_cast<double>(radius);
   double dy =
-      (pos.y() - cy) / static_cast<double>(radius);  // No inversion: down = positive (pull back)
+    (pos.y() - cy) / static_cast<double>(radius);    // No inversion: down = positive (pull back)
 
   // Clamp to unit circle
   double mag = std::sqrt(dx * dx + dy * dy);
@@ -163,12 +174,14 @@ void JoystickWidget::updatePosition(const QPoint& pos) {
 // JoyPanel Implementation
 // ============================================================================
 
-JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
-  auto* layout = new QVBoxLayout;
+JoyPanel::JoyPanel(QWidget * parent)
+: rviz_common::Panel(parent)
+{
+  auto * layout = new QVBoxLayout;
 
   // Title and enable checkbox
-  auto* header_layout = new QHBoxLayout;
-  auto* title_label = new QLabel("<b>Virtual Joystick</b>");
+  auto * header_layout = new QHBoxLayout;
+  auto * title_label = new QLabel("<b>Virtual Joystick</b>");
   header_layout->addWidget(title_label);
   header_layout->addStretch();
   enable_checkbox_ = new QCheckBox("Enabled");
@@ -178,7 +191,7 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   connect(enable_checkbox_, &QCheckBox::stateChanged, this, &JoyPanel::onEnabledChanged);
 
   // Mode selector
-  auto* mode_layout = new QHBoxLayout;
+  auto * mode_layout = new QHBoxLayout;
   mode_layout->addWidget(new QLabel("Mode:"));
   mode_combo_ = new QComboBox();
   mode_combo_->addItem("Manual");
@@ -196,7 +209,7 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   connect(joystick_, &JoystickWidget::joystickMoved, this, &JoyPanel::onJoystickMoved);
 
   // Throttle slider
-  auto* throttle_layout = new QHBoxLayout;
+  auto * throttle_layout = new QHBoxLayout;
   throttle_layout->addWidget(new QLabel("Throttle:"));
   throttle_slider_ = new QSlider(Qt::Horizontal);
   throttle_slider_->setRange(0, 100);
@@ -209,7 +222,7 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   connect(throttle_slider_, &QSlider::valueChanged, this, &JoyPanel::onThrottleChanged);
 
   // Rudder slider
-  auto* rudder_layout = new QHBoxLayout;
+  auto * rudder_layout = new QHBoxLayout;
   rudder_layout->addWidget(new QLabel("Rudder:"));
   rudder_slider_ = new QSlider(Qt::Horizontal);
   rudder_slider_->setRange(-100, 100);
@@ -222,7 +235,7 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   connect(rudder_slider_, &QSlider::valueChanged, this, &JoyPanel::onRudderChanged);
 
   // Aileron trim slider (bottom of joystick area)
-  auto* aileron_trim_layout = new QHBoxLayout;
+  auto * aileron_trim_layout = new QHBoxLayout;
   aileron_trim_layout->addWidget(new QLabel("Ail Trim:"));
   aileron_trim_slider_ = new QSlider(Qt::Horizontal);
   aileron_trim_slider_->setRange(-50, 50);  // ±0.5 trim range
@@ -235,7 +248,7 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   connect(aileron_trim_slider_, &QSlider::valueChanged, this, &JoyPanel::onAileronTrimChanged);
 
   // Elevator trim slider (right of joystick area)
-  auto* elevator_trim_layout = new QHBoxLayout;
+  auto * elevator_trim_layout = new QHBoxLayout;
   elevator_trim_layout->addWidget(new QLabel("Elev Trim:"));
   elevator_trim_slider_ = new QSlider(Qt::Horizontal);
   elevator_trim_slider_->setRange(-50, 50);  // ±0.5 trim range
@@ -263,7 +276,7 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   // Create subscribers to monitor external control (e.g., from gamepad)
   joy_subscriber_ = node_->create_subscription<cubs2_msgs::msg::AircraftControl>(
       "/control", 10,
-      [this](const cubs2_msgs::msg::AircraftControl::SharedPtr msg) { controlCallback(msg); });
+    [this](const cubs2_msgs::msg::AircraftControl::SharedPtr msg) {controlCallback(msg);});
 
   // Create timer for publishing control inputs at 20 Hz
   control_timer_ = new QTimer(this);
@@ -274,7 +287,7 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
   // Create timer for spinning ROS2 node (process callbacks in Qt thread)
   ros_spin_timer_ = new QTimer(this);
   ros_spin_timer_->setInterval(10);  // 100 Hz for responsive callbacks
-  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() { rclcpp::spin_some(node_); });
+  connect(ros_spin_timer_, &QTimer::timeout, this, [this]() {rclcpp::spin_some(node_);});
   ros_spin_timer_->start();
 
   // Set initial state after all widgets are created
@@ -283,35 +296,41 @@ JoyPanel::JoyPanel(QWidget* parent) : rviz_common::Panel(parent) {
 
 JoyPanel::~JoyPanel() = default;
 
-void JoyPanel::onJoystickMoved(double aileron, double elevator) {
+void JoyPanel::onJoystickMoved(double aileron, double elevator)
+{
   aileron_ = aileron;
   elevator_ = elevator;
   // Publishing happens in the timer callback
 }
 
-void JoyPanel::onThrottleChanged(int value) {
+void JoyPanel::onThrottleChanged(int value)
+{
   throttle_ = value / 100.0;
   throttle_label_->setText(QString::number(throttle_, 'f', 2));
 }
 
-void JoyPanel::onRudderChanged(int value) {
+void JoyPanel::onRudderChanged(int value)
+{
   rudder_ = value / 100.0;
   rudder_label_->setText(QString::number(rudder_, 'f', 2));
 }
 
-void JoyPanel::onAileronTrimChanged(int value) {
+void JoyPanel::onAileronTrimChanged(int value)
+{
   aileron_trim_ = value / 100.0;  // ±0.5 range
   aileron_trim_label_->setText(QString::number(aileron_trim_, 'f', 2));
   joystick_->setTrim(aileron_trim_, elevator_trim_);
 }
 
-void JoyPanel::onElevatorTrimChanged(int value) {
+void JoyPanel::onElevatorTrimChanged(int value)
+{
   elevator_trim_ = value / 100.0;  // ±0.5 range
   elevator_trim_label_->setText(QString::number(elevator_trim_, 'f', 2));
   joystick_->setTrim(aileron_trim_, elevator_trim_);
 }
 
-void JoyPanel::publishControlInputs() {
+void JoyPanel::publishControlInputs()
+{
   // Only publish if enabled
   if (!enabled_) {
     return;
@@ -332,7 +351,8 @@ void JoyPanel::publishControlInputs() {
   mode_publisher_->publish(mode_msg);
 }
 
-void JoyPanel::onResetClicked() {
+void JoyPanel::onResetClicked()
+{
   joystick_->reset();
   throttle_slider_->setValue(0);
   rudder_slider_->setValue(0);
@@ -346,7 +366,8 @@ void JoyPanel::onResetClicked() {
   elevator_trim_ = 0.0;
 }
 
-void JoyPanel::onEnabledChanged(int state) {
+void JoyPanel::onEnabledChanged(int state)
+{
   enabled_ = (state == Qt::Checked);
   // Enable/disable controls for user input, but keep them visually active
   // so they can display external control values
@@ -362,19 +383,23 @@ void JoyPanel::onEnabledChanged(int state) {
   joystick_->setAttribute(Qt::WA_TransparentForMouseEvents, !enabled_);
 }
 
-void JoyPanel::onModeChanged(int index) {
+void JoyPanel::onModeChanged(int index)
+{
   mode_ = index;  // 0 = manual, 1 = stabilized
 }
 
-void JoyPanel::controlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg) {
+void JoyPanel::controlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg)
+{
   // Only update display if disabled (showing external control)
   if (!enabled_) {
     updateDisplayFromExternal(msg->aileron, msg->elevator, msg->throttle, msg->rudder);
   }
 }
 
-void JoyPanel::updateDisplayFromExternal(double aileron, double elevator, double throttle,
-                                         double rudder) {
+void JoyPanel::updateDisplayFromExternal(
+  double aileron, double elevator, double throttle,
+  double rudder)
+{
   // Update internal state (for display purposes only when disabled)
   aileron_ = aileron;
   elevator_ = elevator;

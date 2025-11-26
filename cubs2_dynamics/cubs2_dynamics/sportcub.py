@@ -51,13 +51,15 @@ class SportCubStatesQuat:
 
 @symbolic
 class SportCubStatesEuler:
-    """Euler angle representation.
+    """
+    Euler angle representation.
 
     Note: Angular velocity w follows FLU convention (p, q, r).
     Euler angles r = [psi, theta, phi] follow aeronautical convention:
     - phi (roll): positive = right wing down
     - theta (pitch): positive = nose up
     - psi (yaw): positive = nose right (clockwise viewed from above)
+
     """
 
     # Class attribute, not part of state vector
@@ -105,7 +107,7 @@ class SportCubParams:
         np.deg2rad(6.0), 'wing incidence angle (rad)')
 
     # Pitch coefficients
-    Cm0: ca.SX = param(-0.05, 'pitch moment coeff')
+    Cm0: ca.SX = param(0.0, 'pitch moment coeff')
     Cma: ca.SX = param(-0.8, 'pitch moment slope (1/rad)')
     Cmq: ca.SX = param(-12.0, 'pitch damping (1/rad)')
 
@@ -120,7 +122,7 @@ class SportCubParams:
     # Control effectiveness
     Clda: ca.SX = param(0.05, 'aileron roll (1/rad)')
     Cldr: ca.SX = param(0.006, 'rudder roll (1/rad)')
-    Cmde: ca.SX = param(0.45, 'elevator pitch (1/rad)')
+    Cmde: ca.SX = param(0.3, 'elevator pitch (1/rad)')
     Cndr: ca.SX = param(0.015, 'rudder yaw (1/rad)')
     Cnda: ca.SX = param(0.006, 'aileron yaw (1/rad)')
     CYda: ca.SX = param(0.004, 'aileron sideforce (1/rad)')
@@ -195,10 +197,12 @@ def clamp(val: ca.SX, low: ca.SX | int | float,
 @beartype
 def casadi_min_withcargo(
         costs: list[ca.SX], cargos: list[ca.SX]) -> tuple[ca.SX, ca.SX]:
-    """Branch-free CasADi minimum with associated cargo.
+    """
+    Branch-free CasADi minimum with associated cargo.
 
     Finds minimum cost and returns the corresponding cargo value using
     branch-free operations suitable for symbolic computation.
+
     """
     if len(costs) == 1:
         return costs[0], cargos[0]
@@ -216,10 +220,12 @@ def casadi_min_withcargo(
 
 @beartype
 def flu_to_frd(v_flu: ca.SX) -> ca.SX:
-    """Convert ROS FLU (+x forward, +y left, +z up) to classical FRD.
+    """
+    Convert ROS FLU (+x forward, +y left, +z up) to classical FRD.
 
     Converts from ROS FLU (+x forward, +y left, +z up) coordinate system
     to classical FRD (+x forward, +y right, +z down) coordinate system.
+
     """
     return ca.vertcat(v_flu[0], -v_flu[1], -v_flu[2])
 
@@ -234,21 +240,25 @@ def frd_to_flu(v_frd: ca.SX) -> ca.SX:
 def wind_axes_from_velocity_frd(
     v_frd: ca.SX, eps: float = 1e-6
 ) -> tuple[ca.SX, ca.SX, ca.SX, ca.SX]:
-    """Build wind-frame DCM from velocity vector (FRD convention).
+    """
+    Build wind-frame DCM from velocity vector (FRD convention).
 
     Constructs a wind-aligned coordinate frame where x-axis points along velocity.
     Prefers to keep z-axis aligned with body z-axis for normal flight, but switches
     to x-axis reference when velocity is nearly vertical (to avoid singularity).
 
-    Args:
+    Args
+    ----
         v_frd: Velocity vector in FRD frame
         eps: Small value to prevent division by zero
 
-    Returns:
+    Returns
+    -------
         R_b_wind: DCM from body to wind frame (columns are wind axes in body frame)
         Vt: Total airspeed (with eps added to prevent division by zero)
         alpha: Angle of attack (rad)
         beta: Sideslip angle (rad)
+
     """
     U, V, W = v_frd[0], v_frd[1], v_frd[2]
     Vt = ca.norm_2(v_frd) + eps
@@ -291,13 +301,15 @@ def aero_coefficients(
     u: SportCubInputs,
     p: SportCubParams,
 ) -> dict[str, ca.SX]:
-    """Compute aerodynamic coefficients with smooth stall model.
+    """
+    Compute aerodynamic coefficients with smooth stall model.
 
     Uses tanh blending between linear (pre-stall) and flat-plate (post-stall) models
     to create a smooth transition through stall. The blending factor sigma transitions
     from 0 (linear) to 1 (flat-plate) as alpha exceeds alpha_stall.
 
-    Args:
+    Args
+    ----
         Vt: Total airspeed (m/s) - must include small epsilon to avoid division by zero
         alpha: Angle of attack (rad)
         beta: Sideslip angle (rad)
@@ -305,8 +317,10 @@ def aero_coefficients(
         u: Control surface inputs
         p: Aircraft parameters
 
-    Returns:
+    Returns
+    -------
         Dictionary with keys: CL, CD, CY, Cl, Cm, Cn
+
     """
     # Convert body angular rates to FRD convention
     w_b_frd = flu_to_frd(x.w)
@@ -369,16 +383,20 @@ def aerodynamic_forces_and_moments(
     u: SportCubInputs,
     p: SportCubParams,
 ) -> dict:
-    """Compute aerodynamic forces and moments in body FLU frame.
+    """
+    Compute aerodynamic forces and moments in body FLU frame.
 
-    Args:
+    Args
+    ----
         x: Aircraft state
         R_eb: Rotation from earth to body frame
         u: Control inputs
         p: Aircraft parameters
 
-    Returns:
+    Returns
+    -------
         Dictionary with keys: FA_b, MA_b, Vt, alpha, beta, qbar, CL, CD
+
     """
     # Convert earth velocity to body frame
     R_be = R_eb.inverse()
@@ -429,7 +447,8 @@ def ground_forces_and_moments(
     u: SportCubInputs,
     p: SportCubParams,
 ) -> dict:
-    """Compute ground reaction forces and moments from wheel contact.
+    """
+    Compute ground reaction forces and moments from wheel contact.
 
     Implements a 3-wheel tricycle landing gear with spring-damper-friction model.
     Wheel positions are hardcoded in body FLU frame:
@@ -440,14 +459,17 @@ def ground_forces_and_moments(
     Forces computed in earth frame, then transformed to body frame for moments.
     Tail wheel steering: rudder input creates a yaw moment when tail wheel is on ground.
 
-    Args:
+    Args
+    ----
         x: Aircraft state
         R_eb: Rotation from earth to body frame
         u: Control inputs (for rudder-linked tail wheel steering)
         p: Aircraft parameters
 
-    Returns:
+    Returns
+    -------
         Dictionary with keys: FG_b, MG_b
+
     """
     left_wheel_b = ca.SX([0.1, 0.1, -0.1])
     right_wheel_b = ca.SX([0.1, -0.1, -0.1])
@@ -544,16 +566,20 @@ def ground_forces_and_moments(
 
 @beartype
 def sportcub(attitude_rep: AttitudeRep = 'quat') -> ModelSX:
-    """Create SportCub 6-DOF aircraft model.
+    """
+    Create SportCub 6-DOF aircraft model.
 
     Frames: e=earth (ENU inertial), b=body (FLU), wind=aligned with velocity
 
-    Args:
+    Args
+    ----
         attitude_rep: 'quat' (default) for quaternions (ROS2 compatible, no singularities)
                      'euler' for Euler angles (better for linearization analysis)
 
-    Returns:
+    Returns
+    -------
         ModelSX instance with selected attitude representation
+
     """
     if attitude_rep == 'quat':
         model = ModelSX.create(

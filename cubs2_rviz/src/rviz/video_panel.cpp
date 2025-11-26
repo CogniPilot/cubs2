@@ -15,13 +15,16 @@
 #include <QGridLayout>
 #include <QGroupBox>
 
-namespace cubs2 {
+namespace cubs2
+{
 
 // ============================================================================
 // VideoWidget Implementation
 // ============================================================================
 
-VideoWidget::VideoWidget(QWidget* parent) : QLabel(parent) {
+VideoWidget::VideoWidget(QWidget * parent)
+: QLabel(parent)
+{
   setMinimumSize(320, 240);
   setAlignment(Qt::AlignCenter);
   setStyleSheet("QLabel { background-color: black; }");
@@ -29,17 +32,20 @@ VideoWidget::VideoWidget(QWidget* parent) : QLabel(parent) {
   setScaledContents(false);
 }
 
-void VideoWidget::setFrame(const QImage& frame) {
+void VideoWidget::setFrame(const QImage & frame)
+{
   current_frame_ = frame;
   updateDisplay();
 }
 
-void VideoWidget::resizeEvent(QResizeEvent* event) {
+void VideoWidget::resizeEvent(QResizeEvent * event)
+{
   QLabel::resizeEvent(event);
   updateDisplay();
 }
 
-void VideoWidget::updateDisplay() {
+void VideoWidget::updateDisplay()
+{
   if (current_frame_.isNull()) {
     return;
   }
@@ -53,32 +59,33 @@ void VideoWidget::updateDisplay() {
 // VideoPanel Implementation
 // ============================================================================
 
-VideoPanel::VideoPanel(QWidget* parent)
-    : rviz_common::Panel(parent),
-      pipeline_(nullptr),
-      appsink_(nullptr),
-      is_connected_(false),
-      has_new_frame_(false) {
+VideoPanel::VideoPanel(QWidget * parent)
+: rviz_common::Panel(parent),
+  pipeline_(nullptr),
+  appsink_(nullptr),
+  is_connected_(false),
+  has_new_frame_(false)
+{
   // Initialize GStreamer
   if (!gst_is_initialized()) {
     gst_init(nullptr, nullptr);
   }
 
   // Create UI layout
-  QVBoxLayout* main_layout = new QVBoxLayout;
+  QVBoxLayout * main_layout = new QVBoxLayout;
 
   // Video display widget
   video_widget_ = new VideoWidget(this);
   main_layout->addWidget(video_widget_, 1);
 
   // Control panel
-  QGroupBox* control_group = new QGroupBox("Video Source");
-  QGridLayout* control_layout = new QGridLayout;
+  QGroupBox * control_group = new QGroupBox("Video Source");
+  QGridLayout * control_layout = new QGridLayout;
 
   // Source selection
   source_combo_ = new QComboBox;
   setupPredefinedSources();
-  for (const auto& source : predefined_sources_) {
+  for (const auto & source : predefined_sources_) {
     source_combo_->addItem(source.name);
   }
   source_combo_->addItem("Custom URI");
@@ -119,40 +126,44 @@ VideoPanel::VideoPanel(QWidget* parent)
   connect(frame_timer_, SIGNAL(timeout()), this, SLOT(updateFrame()));
 }
 
-VideoPanel::~VideoPanel() {
+VideoPanel::~VideoPanel()
+{
   cleanupGStreamer();
 }
 
-void VideoPanel::onInitialize() {
+void VideoPanel::onInitialize()
+{
   rviz_common::Panel::onInitialize();
   context_ = getDisplayContext();
 }
 
-void VideoPanel::setupPredefinedSources() {
+void VideoPanel::setupPredefinedSources()
+{
   predefined_sources_ = {
-      {"Test Pattern",
-       "videotestsrc pattern=smpte ! video/x-raw,width=640,height=480,framerate=30/1",
-       "SMPTE color bars test pattern"},
+    {"Test Pattern",
+      "videotestsrc pattern=smpte ! video/x-raw,width=640,height=480,framerate=30/1",
+      "SMPTE color bars test pattern"},
 
-      {"USB Camera (default)",
-       "v4l2src device=/dev/video0 ! video/x-raw,width=640,height=480,framerate=30/1",
-       "Default USB camera /dev/video0"},
+    {"USB Camera (default)",
+      "v4l2src device=/dev/video0 ! video/x-raw,width=640,height=480,framerate=30/1",
+      "Default USB camera /dev/video0"},
 
-      {"RTSP Stream (example)",
-       "rtspsrc location=rtsp://192.168.1.100:8554/video latency=0 ! decodebin",
-       "RTSP network stream"},
+    {"RTSP Stream (example)",
+      "rtspsrc location=rtsp://192.168.1.100:8554/video latency=0 ! decodebin",
+      "RTSP network stream"},
 
-      {"UDP Stream (H.264)",
-       "udpsrc port=5600 ! application/x-rtp,encoding-name=H264 ! rtph264depay ! avdec_h264",
-       "UDP H.264 stream on port 5600"},
+    {"UDP Stream (H.264)",
+      "udpsrc port=5600 ! application/x-rtp,encoding-name=H264 ! rtph264depay ! avdec_h264",
+      "UDP H.264 stream on port 5600"},
 
-      {"UDP Stream (MJPEG)",
-       "udpsrc port=5600 ! application/x-rtp,encoding-name=JPEG ! rtpjpegdepay ! jpegdec",
-       "UDP MJPEG stream on port 5600"},
+    {"UDP Stream (MJPEG)",
+      "udpsrc port=5600 ! application/x-rtp,encoding-name=JPEG ! rtpjpegdepay ! jpegdec",
+      "UDP MJPEG stream on port 5600"},
   };
 }
 
-void VideoPanel::onSourceChanged(int index) {
+void VideoPanel::onSourceChanged(int index)
+{
   bool is_custom = (index == static_cast<int>(predefined_sources_.size()));
   uri_edit_->setEnabled(is_custom);
 
@@ -164,7 +175,8 @@ void VideoPanel::onSourceChanged(int index) {
   }
 }
 
-void VideoPanel::onConnectClicked() {
+void VideoPanel::onConnectClicked()
+{
   std::string uri = uri_edit_->text().toStdString();
 
   if (uri.empty()) {
@@ -193,7 +205,8 @@ void VideoPanel::onConnectClicked() {
   }
 }
 
-void VideoPanel::onDisconnectClicked() {
+void VideoPanel::onDisconnectClicked()
+{
   is_connected_ = false;
   cleanupGStreamer();
   connect_button_->setEnabled(true);
@@ -211,13 +224,14 @@ void VideoPanel::onDisconnectClicked() {
   video_widget_->setText("No Video Stream");
 }
 
-bool VideoPanel::createPipeline(const std::string& uri) {
+bool VideoPanel::createPipeline(const std::string & uri)
+{
   // Build complete pipeline with videoconvert and appsink
   std::string pipeline_str =
-      uri +
-      " ! videoconvert ! video/x-raw,format=RGB ! appsink name=sink emit-signals=true sync=false";
+    uri +
+    " ! videoconvert ! video/x-raw,format=RGB ! appsink name=sink emit-signals=true sync=false";
 
-  GError* error = nullptr;
+  GError * error = nullptr;
   pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
 
   if (error != nullptr) {
@@ -245,19 +259,20 @@ bool VideoPanel::createPipeline(const std::string& uri) {
 
   // Set callback for new samples
   static GstAppSinkCallbacks callbacks = {
-      nullptr,        // eos
-      nullptr,        // new_preroll
-      on_new_sample,  // new_sample
-      nullptr,        // new_event
-      nullptr,        // propose_allocation
-      {}              // _gst_reserved
+    nullptr,          // eos
+    nullptr,          // new_preroll
+    on_new_sample,    // new_sample
+    nullptr,          // new_event
+    nullptr,          // propose_allocation
+    {}                // _gst_reserved
   };
   gst_app_sink_set_callbacks(GST_APP_SINK(appsink_), &callbacks, this, nullptr);
 
   return true;
 }
 
-void VideoPanel::cleanupGStreamer() {
+void VideoPanel::cleanupGStreamer()
+{
   // Stop timer first to prevent accessing freed GStreamer objects
   if (frame_timer_) {
     frame_timer_->stop();
@@ -279,27 +294,28 @@ void VideoPanel::cleanupGStreamer() {
   }
 }
 
-GstFlowReturn VideoPanel::on_new_sample(GstAppSink* appsink, gpointer user_data) {
-  VideoPanel* panel = static_cast<VideoPanel*>(user_data);
+GstFlowReturn VideoPanel::on_new_sample(GstAppSink * appsink, gpointer user_data)
+{
+  VideoPanel * panel = static_cast<VideoPanel *>(user_data);
 
   // Safety check - panel might be destroyed during shutdown
   if (!panel || !panel->pipeline_) {
     return GST_FLOW_FLUSHING;
   }
 
-  GstSample* sample = gst_app_sink_pull_sample(appsink);
+  GstSample * sample = gst_app_sink_pull_sample(appsink);
   if (!sample) {
     return GST_FLOW_ERROR;
   }
 
-  GstCaps* caps = gst_sample_get_caps(sample);
-  GstStructure* structure = gst_caps_get_structure(caps, 0);
+  GstCaps * caps = gst_sample_get_caps(sample);
+  GstStructure * structure = gst_caps_get_structure(caps, 0);
 
   int width, height;
   gst_structure_get_int(structure, "width", &width);
   gst_structure_get_int(structure, "height", &height);
 
-  GstBuffer* buffer = gst_sample_get_buffer(sample);
+  GstBuffer * buffer = gst_sample_get_buffer(sample);
   GstMapInfo map;
 
   if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
@@ -321,7 +337,8 @@ GstFlowReturn VideoPanel::on_new_sample(GstAppSink* appsink, gpointer user_data)
   return GST_FLOW_OK;
 }
 
-void VideoPanel::updateFrame() {
+void VideoPanel::updateFrame()
+{
   // Check for new frame from GStreamer thread
   QImage frame_to_display;
   bool have_frame = false;

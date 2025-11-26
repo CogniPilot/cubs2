@@ -285,12 +285,17 @@ class SimNode(Node):
         self.joint_state_publisher.publish(joint_state)
 
     def publish_force_moment_markers(self, outputs):
-        """Publish MarkerArray for force and moment visualization.
+        """
+        Publish MarkerArray for force and moment visualization.
 
         Creates arrow markers for aerodynamic, thrust, and weight forces.
         Creates curved arrow/arc markers for moments to distinguish from forces.
-        Args:
-            outputs: SportCubOutputs dataclass instance
+
+        Parameters
+        ----------
+        outputs : SportCubOutputs
+            Dataclass instance containing force and moment vectors
+
         """
         try:
             # Extract force and moment vectors (body frame) from dataclass
@@ -354,10 +359,12 @@ class SimNode(Node):
 
             # Helper to create circular arc marker for moments
             def create_moment_arc(marker_id, name, vec, color, scale=1.0):
-                """Create circular arc marker for moment vector using LINE_STRIP.
+                """
+                Create circular arc marker for moment vector using LINE_STRIP.
 
                 The arc is drawn perpendicular to the moment vector (right-hand rule).
                 Radius proportional to moment magnitude.
+
                 """
                 magnitude = np.linalg.norm(vec)
 
@@ -686,10 +693,12 @@ class SimNode(Node):
         # )
 
     def publish_visuals(self):
-        """Publish the current state (clock + TF + joint states) without advancing physics.
+        """
+        Publish the current state (clock + TF + joint states) without advancing physics.
 
         Useful after a reset while paused so RViz immediately reflects the new
         initial conditions instead of waiting for the user to press play.
+
         """
         # Publish current (reset) clock value
         sim_time_msg = self.get_sim_time_msg()

@@ -27,21 +27,22 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/panel.hpp>
 
-namespace cubs2 {
+namespace cubs2
+{
 
 // Custom widget for drawing the HUD display
 class HUDWidget : public QWidget {
   Q_OBJECT
 
 public:
-  explicit HUDWidget(QWidget* parent = nullptr);
+  explicit HUDWidget(QWidget * parent = nullptr);
 
   void setAttitude(double roll, double pitch, double yaw);
   void setAltitude(double altitude);
   void setAirspeed(double airspeed);
 
 protected:
-  void paintEvent(QPaintEvent* event) override;
+  void paintEvent(QPaintEvent * event) override;
 
 private:
   double roll_{0.0};      // radians
@@ -50,9 +51,9 @@ private:
   double altitude_{0.0};  // meters
   double airspeed_{0.0};  // m/s
 
-  void drawHorizon(QPainter& painter, int cx, int cy, int size);
-  void drawRollIndicator(QPainter& painter, int cx, int cy, int size);
-  void drawText(QPainter& painter);
+  void drawHorizon(QPainter & painter, int cx, int cy, int size);
+  void drawRollIndicator(QPainter & painter, int cx, int cy, int size);
+  void drawText(QPainter & painter);
 };
 
 // RViz panel that subscribes to pose and velocity topics
@@ -60,7 +61,7 @@ class HUDPanel : public rviz_common::Panel {
   Q_OBJECT
 
 public:
-  explicit HUDPanel(QWidget* parent = nullptr);
+  explicit HUDPanel(QWidget * parent = nullptr);
   ~HUDPanel() override;
 
 private:
@@ -70,9 +71,9 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_subscription_;
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr velocity_subscription_;
-  QTimer* ros_spin_timer_{nullptr};
+  QTimer * ros_spin_timer_{nullptr};
 
-  HUDWidget* hud_widget_{nullptr};
+  HUDWidget * hud_widget_{nullptr};
 
   double roll_{0.0};
   double pitch_{0.0};

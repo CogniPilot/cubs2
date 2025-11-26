@@ -47,13 +47,16 @@ class ClosedLoopOutputs:
 
 @beartype
 def closed_loop_sportcub() -> ModelSX:
-    """Create closed-loop aircraft model with autolevel controller.
+    """
+    Create closed-loop aircraft model with autolevel controller.
 
     Uses ModelSX hierarchical composition to combine the aircraft plant
     and autolevel controller into a single integrated model.
 
-    Returns:
+    Returns
+    -------
         ModelSX: Composed closed-loop system model
+
     """
     # Create submodels
     plant = sportcub()

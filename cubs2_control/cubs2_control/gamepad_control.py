@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Gamepad control node for SportCub simulation.
+"""
+Gamepad control node for SportCub simulation.
 
 Maps gamepad inputs to AircraftControl message format.
 
@@ -246,12 +247,14 @@ class GamepadControlNode(Node):
         return msg.buttons[button_idx]
 
     def _get_trim_step(self, button_idx: int) -> float:
-        """Get trim step size with acceleration for held buttons.
+        """
+        Get trim step size with acceleration for held buttons.
 
         First press: normal step
         After 5 presses: 2x speed
         After 15 presses: 4x speed
         After 30 presses: 8x speed
+
         """
         # Increment hold count
         if button_idx not in self.trim_hold_count:
@@ -271,9 +274,11 @@ class GamepadControlNode(Node):
             return self.trim_step
 
     def _get_trim_step_axis(self, axis_key: str, is_active: bool) -> float:
-        """Get trim step size with acceleration for held axis positions.
+        """
+        Get trim step size with acceleration for held axis positions.
 
         Similar to button acceleration but uses string keys for axis directions.
+
         """
         if not is_active:
             return self.trim_step
@@ -296,12 +301,16 @@ class GamepadControlNode(Node):
             return self.trim_step
 
     def _get_throttle_step(self, direction: str) -> float:
-        """Get throttle step size with acceleration for held stick.
+        """
+        Get throttle step size with acceleration for held stick.
 
-        Args:
-            direction: 'up' or 'down'
+        Parameters
+        ----------
+        direction : str
+            Direction of throttle change ('up' or 'down')
 
         Slower acceleration than trim controls for better fine control.
+
         """
         # Use separate counters for up and down
         if direction == 'up':

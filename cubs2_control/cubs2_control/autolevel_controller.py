@@ -98,7 +98,8 @@ class AutolevelOutputs:
 
 @beartype
 def autolevel_controller() -> ModelSX:
-    """Create SAFE/AS3X style autolevel controller.
+    """
+    Create SAFE/AS3X style autolevel controller.
 
     A cascaded gyro-based stabilization system like SAFE/AS3X trainers:
     - Inner loop: rate damping (fast, gyro-based)
@@ -117,8 +118,10 @@ def autolevel_controller() -> ModelSX:
 
     Maximum bank angle limited to 50 degrees.
 
-    Returns:
+    Returns
+    -------
         ModelSX: Autolevel controller model with integral states and control outputs
+
     """
     model = ModelSX.create(
         AutolevelStates,

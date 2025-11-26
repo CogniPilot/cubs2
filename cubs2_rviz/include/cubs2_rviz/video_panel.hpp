@@ -35,18 +35,19 @@
 #include <rviz_common/panel.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
-namespace cubs2 {
+namespace cubs2
+{
 
 // Custom widget for displaying video stream
 class VideoWidget : public QLabel {
   Q_OBJECT
 
 public:
-  explicit VideoWidget(QWidget* parent = nullptr);
-  void setFrame(const QImage& frame);
+  explicit VideoWidget(QWidget * parent = nullptr);
+  void setFrame(const QImage & frame);
 
 protected:
-  void resizeEvent(QResizeEvent* event) override;
+  void resizeEvent(QResizeEvent * event) override;
 
 private:
   QImage current_frame_;
@@ -58,7 +59,7 @@ class VideoPanel : public rviz_common::Panel {
   Q_OBJECT
 
 public:
-  explicit VideoPanel(QWidget* parent = nullptr);
+  explicit VideoPanel(QWidget * parent = nullptr);
   ~VideoPanel() override;
 
   void onInitialize() override;
@@ -71,32 +72,33 @@ protected Q_SLOTS:
 
 private:
   // UI elements
-  VideoWidget* video_widget_;
-  QComboBox* source_combo_;
-  QLineEdit* uri_edit_;
-  QPushButton* connect_button_;
-  QPushButton* disconnect_button_;
-  QLabel* status_label_;
+  VideoWidget * video_widget_;
+  QComboBox * source_combo_;
+  QLineEdit * uri_edit_;
+  QPushButton * connect_button_;
+  QPushButton * disconnect_button_;
+  QLabel * status_label_;
 
   // GStreamer pipeline
-  GstElement* pipeline_;
-  GstElement* appsink_;
+  GstElement * pipeline_;
+  GstElement * appsink_;
   bool is_connected_;
   QMutex frame_mutex_;
   QImage pending_frame_;
   bool has_new_frame_;
 
   // ROS 2 display context
-  rviz_common::DisplayContext* context_;
-  QTimer* frame_timer_;
+  rviz_common::DisplayContext * context_;
+  QTimer * frame_timer_;
 
   // Helper methods
   bool initializeGStreamer();
   void cleanupGStreamer();
-  bool createPipeline(const std::string& uri);
+  bool createPipeline(const std::string & uri);
 
   // Predefined video sources
-  struct VideoSource {
+  struct VideoSource
+  {
     QString name;
     QString uri;
     QString description;
@@ -105,7 +107,7 @@ private:
   void setupPredefinedSources();
 
   // GStreamer callback
-  static GstFlowReturn on_new_sample(GstAppSink* appsink, gpointer user_data);
+  static GstFlowReturn on_new_sample(GstAppSink * appsink, gpointer user_data);
 };
 
 }  // namespace cubs2

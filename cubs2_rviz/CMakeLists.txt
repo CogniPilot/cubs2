@@ -58,7 +58,7 @@ ament_target_dependencies(cubs2_rviz
   sensor_msgs
 )
 
-target_link_libraries(cubs2_rviz 
+target_link_libraries(cubs2_rviz
   Qt5::Widgets
   ${GSTREAMER_LIBRARIES}
   ${GSTREAMER_APP_LIBRARIES}
@@ -97,7 +97,6 @@ ament_export_dependencies(
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
-  # Linting disabled - using Black for Python formatting only
 endif()
 
 ament_package()

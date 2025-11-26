@@ -126,48 +126,47 @@ ros2 launch cubs2_bringup sim.xml bag_path:=/path/to/your/bag.mcap
 # Build all packages
 colcon build --symlink-install
 
-# Run tests
+# Run tests and linting (standard ROS 2 approach)
 colcon test
 colcon test-result --verbose
 
-# Or use the Makefile
-cd src/cubs2
-make build
-make test
+# Run tests for specific packages
+colcon test --packages-select cubs2_dynamics cubs2_control
 ```
 
-### Code Formatting and Linting
+### Code Quality and Linting
 
-This project follows ROS2 coding standards with automated formatting:
+This project follows standard ROS 2 linting practices using `ament` tools:
 
-**Python** (Black + isort + flake8):
+**Python linting** (ament_flake8, ament_pep257):
+- Automatically checked via `colcon test`
+- Style: PEP 8 with 99-character line limit
+- Docstrings: NumPy-style (PEP 257 compliant)
+
+**C++ linting** (ament_cpplint, ament_uncrustify):
+- Automatically checked via `colcon test`
+- Style: ROS 2 C++ style guide
+
+**All linters configured in package.xml:**
+- `ament_copyright` - License header validation
+- `ament_flake8` - Python style checking
+- `ament_pep257` - Python docstring validation
+- `ament_cpplint` - C++ style checking
+- `ament_uncrustify` - C++ code formatting
+- `ament_lint_cmake` - CMake linting
+- `ament_xmllint` - XML validation
+
+**Run linters separately:**
 ```bash
-cd src/cubs2
-make format-python
-```
+# Check Python code style
+ament_flake8 src/cubs2/cubs2_dynamics
 
-**C++** (clang-format):
-```bash
-cd src/cubs2
-make format-cpp
-```
+# Check Python docstrings
+ament_pep257 src/cubs2/cubs2_dynamics
 
-**All code**:
-```bash
-cd src/cubs2
-make format
+# Check C++ code
+ament_cpplint src/cubs2/cubs2_rviz
 ```
-
-**Run linters**:
-```bash
-cd src/cubs2
-make lint
-```
-
-Configuration files in `.devtools/`:
-- Python: `pyproject.toml`, `.flake8`
-- C++: `.clang-format`
-- Scripts: `format_python.sh`, `format_cpp.sh`
 
 ## Features
 

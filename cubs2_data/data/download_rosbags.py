@@ -12,10 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Download rosbag files from Google Drive.
+"""
+Download rosbag files from Google Drive.
 
 This script allows selective downloading of rosbag files hosted on Google Drive.
 Run with --list to see available files, or specify IDs or file names to download.
+
 """
 import argparse
 from pathlib import Path
@@ -46,7 +48,8 @@ AVAILABLE_BAGS = [{'id': 1,
 
 
 def download_file(url: str, output_path: Path) -> bool:
-    """Download file from Google Drive using curl.
+    """
+    Download file from Google Drive using curl.
 
     Parameters
     ----------
@@ -59,6 +62,7 @@ def download_file(url: str, output_path: Path) -> bool:
     -------
     bool
         True if download successful, False otherwise
+
     """
     try:
         print(f'Downloading {output_path.name}...')
