@@ -15,6 +15,8 @@
 
 from beartype import beartype
 from builtin_interfaces.msg import Time
+import casadi as ca
+from cubs2_control.closed_loop import closed_loop_sportcub
 from cubs2_dynamics.sportcub import sportcub
 from cubs2_msgs.msg import AircraftControl
 from cubs2_simulation.markers import create_force_arrow
@@ -50,6 +52,9 @@ class SimNode(Node):
         self.declare_parameter('show_forces', True)
         self.show_forces = bool(self.get_parameter('show_forces').value)
 
+        # Model selection parameter
+        self.declare_parameter('model', 'direct')  # 'direct' or 'closed_loop'
+
         # Trim parameters from config file
         self.declare_parameter('controller.trim.aileron', 0.0)
         self.declare_parameter('controller.trim.elevator', 0.0)
@@ -59,7 +64,7 @@ class SimNode(Node):
         self.declare_parameter('initial_position.x', 0.0)
         self.declare_parameter('initial_position.y', 0.0)
         self.declare_parameter('initial_position.z', 0.1)
-        self.declare_parameter('initial_yaw', 0.0)  # radians
+        self.declare_parameter('initial_yaw_deg', -30.0)  # degrees
 
         self.tf_broadcaster = TransformBroadcaster(self)
         self.sim_time_publisher = self.create_publisher(Clock, '/clock', 10)
@@ -92,9 +97,19 @@ class SimNode(Node):
         )
         self.paused_publisher = self.create_publisher(Bool, '/sat/paused', 10)
 
-        # Initialize closed-loop model (composed aircraft + controller)
-        # self.model = closed_loop_sportcub()
-        self.model = sportcub()
+        # Initialize model based on parameter
+        self.model_type = str(self.get_parameter('model').value)
+
+        if self.model_type == 'closed_loop':
+            self.get_logger().info(
+                'Initializing closed-loop model '
+                '(aircraft + autolevel controller)'
+            )
+            self.model = closed_loop_sportcub()
+        else:
+            self.get_logger().info('Initializing direct sportcub model (no controller)')
+            self.model = sportcub()
+
         self.y = self.model.y_current  # computed at end of each step
 
         # Apply initial state (position, orientation, and control inputs)
@@ -124,18 +139,15 @@ class SimNode(Node):
         # Use closed-loop model (aircraft + controller)
         # Simulate one step forward using the simulate method
 
-        self.get_logger().info(
-            f'Simulating from t={self.sim_time - self.dt:.2f}s '
-            f'to t={self.sim_time:.2f}s with dt={self.dt:.3f}s'
-            f'u0={self.model.u0.as_vec()}'
-        )
         try:
-            self.model = self.model.simulate(
+            self.model.simulate(
                 t0=self.sim_time - self.dt,
                 tf=self.sim_time,
                 dt=self.dt,
-                u_func=lambda t, model: model.u0.as_vec(),
+                u_func=self._get_control_inputs,
+                in_place=True,
             )
+
         except RuntimeError as e:
             # cyecca detected NaN or Inf
             self.get_logger().error(f'{e}\nPausing simulation.')
@@ -143,20 +155,55 @@ class SimNode(Node):
             return
 
         # Update propeller angle for animation
-        propeller_rpm = self.model.u0.thr * 2000.0  # Max 2000 RPM at full throttle
+        if self.model_type == 'closed_loop':
+            thr_value = self.model.u0.thr_manual
+        else:
+            thr_value = self.model.u0.thr
+        propeller_rpm = thr_value * 2000.0  # Max 2000 RPM at full throttle
         propeller_omega = propeller_rpm * 2.0 * np.pi / 60.0  # Convert to rad/s
         self.propeller_angle += propeller_omega * self.dt
         self.propeller_angle = self.propeller_angle % (2.0 * np.pi)  # Wrap to [0, 2π]
 
         self.publish_state()
 
+    def _get_control_inputs(self, t, model):
+        """
+        Get control inputs based on model type.
+
+        For closed-loop: 5 inputs (ail_manual, elev_manual, rud_manual,
+                                   thr_manual, mode)
+        For direct: 4 inputs (ail, elev, rud, thr)
+        """
+        if self.model_type == 'closed_loop':
+            return ca.vertcat(
+                model.u0.ail_manual,
+                model.u0.elev_manual,
+                model.u0.rud_manual,
+                model.u0.thr_manual,
+                model.u0.mode
+            )
+        else:
+            return ca.vertcat(
+                model.u0.ail,
+                model.u0.elev,
+                model.u0.rud,
+                model.u0.thr
+            )
+
     @beartype
     def control_callback(self, msg: AircraftControl) -> None:
         """Handle AircraftControl messages."""
-        self.model.u0.ail = float(msg.aileron)
-        self.model.u0.elev = float(msg.elevator)
-        self.model.u0.thr = float(msg.throttle)
-        # self.model.u0.mode = float(msg.mode)
+        # Update actual model inputs based on model type
+        if self.model_type == 'closed_loop':
+            self.model.u0.ail_manual = float(msg.aileron)
+            self.model.u0.elev_manual = float(msg.elevator)
+            self.model.u0.thr_manual = float(msg.throttle)
+            # self.model.u0.rud_manual = float(msg.rudder)
+        else:
+            self.model.u0.ail = float(msg.aileron)
+            self.model.u0.elev = float(msg.elevator)
+            self.model.u0.thr = float(msg.throttle)
+            # self.model.u0.rud = float(msg.rudder)
 
     @beartype
     def pause_topic_callback(self, msg: Empty) -> None:
@@ -214,31 +261,53 @@ class SimNode(Node):
         initial_x = float(self.get_parameter('initial_position.x').value)
         initial_y = float(self.get_parameter('initial_position.y').value)
         initial_z = float(self.get_parameter('initial_position.z').value)
-        initial_yaw = float(self.get_parameter('initial_yaw').value)
+        initial_yaw_deg = float(
+            self.get_parameter('initial_yaw_deg').value
+        )
 
-        # Convert yaw to quaternion (rotation about z-axis in ENU frame)
+        # Convert yaw from degrees to radians, then to quaternion
+        # (rotation about z-axis in ENU frame)
         # Quaternion stored as [w, x, y, z]
-        half_yaw = initial_yaw / 2.0
+        initial_yaw_rad = np.deg2rad(initial_yaw_deg)
+        half_yaw = initial_yaw_rad / 2.0
         qw = np.cos(half_yaw)
         qx = 0.0
         qy = 0.0
         qz = np.sin(half_yaw)
 
-        # Apply to composed model (plant portion)
+        # Apply to aircraft state
         self.model.x0.p[0] = initial_x
         self.model.x0.p[1] = initial_y
         self.model.x0.p[2] = initial_z
+
+        # Reset velocity to zero
+        self.model.x0.v[0] = 0.0
+        self.model.x0.v[1] = 0.0
+        self.model.x0.v[2] = 0.0
+
+        # Set attitude quaternion
         self.model.x0.r[0] = qw
         self.model.x0.r[1] = qx
         self.model.x0.r[2] = qy
         self.model.x0.r[3] = qz
 
+        # Reset angular velocity to zero
+        self.model.x0.w[0] = 0.0
+        self.model.x0.w[1] = 0.0
+        self.model.x0.w[2] = 0.0
+
         # Manual control inputs from joystick/gamepad
-        self.model.u0.ail = 0.0
-        self.model.u0.elev = 0.0
-        self.model.u0.rud = 0.0
-        self.model.u0.thr = 0.0
-        self.model.u0.mode = float(AircraftControl.MODE_MANUAL)
+        if self.model_type == 'closed_loop':
+            self.model.u0.ail_manual = 0.0
+            self.model.u0.elev_manual = 0.0
+            self.model.u0.rud_manual = 0.0
+            self.model.u0.thr_manual = 0.0
+            self.model.u0.mode = float(AircraftControl.MODE_MANUAL)
+        else:
+            self.model.u0.ail = 0.0
+            self.model.u0.elev = 0.0
+            self.model.u0.rud = 0.0
+            self.model.u0.thr = 0.0
 
     @beartype
     def get_sim_time_msg(self) -> Clock:
@@ -272,13 +341,9 @@ class SimNode(Node):
             self.publish_force_moment_markers()
 
         # Extract state as numpy arrays for publishing
-        # position in world frame
         pos = np.array(self.model.x0.p).flatten()
-        # quaternion (world->body) stored as [w, x, y, z]
         q = np.array(self.model.x0.r).flatten()
-        # velocity in world frame
         vel = np.array(self.model.x0.v).flatten()
-        # angular velocity in body frame
         w = np.array(self.model.x0.w).flatten()
 
         # Publish pose using tf (position + orientation)
