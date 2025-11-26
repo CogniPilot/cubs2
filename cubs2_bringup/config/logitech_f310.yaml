@@ -1,0 +1,106 @@
+# Gamepad configuration for cubs2 gamepad control
+# 
+# This file defines the button and axis mappings for your gamepad.
+# Default configuration is for Logitech F310 Gamepad.
+# 
+# To customize for your gamepad:
+# 1. Run: ros2 topic echo /joy
+# 2. Press buttons and move sticks to see their indices
+# 3. Update the mappings below to match your controller
+#
+# Logitech F310 Layout:
+# Axes:
+#   0: Left stick horizontal (left = positive)
+#   1: Left stick vertical (up = positive)
+#   2: Left trigger (unpressed = positive)
+#   3: Right stick horizontal (left = positive)
+#   4: Right stick vertical (up = positive)
+#   5: Right trigger (unpressed = positive)
+#   6: D-pad horizontal (left = positive)
+#   7: D-pad vertical (up = positive)
+# Buttons:
+#   0: A, 1: B, 2: X, 3: Y
+#   4: LB, 5: RB
+#   6: Back, 7: Start, 8: Logitech
+#   9: Left stick press, 10: Right stick press
+
+/**:
+  ros__parameters:
+    # =============================================================================
+    # BUTTON MAPPINGS
+    # =============================================================================
+    # Button indices for various functions
+    # Set to -1 to disable a function
+    
+    # Face buttons (A/B/X/Y)
+    button_reset_neutral: 0        # A button - Reset stick positions and trim to neutral
+    button_send_reset: 1           # B button - Send /reset topic (reset simulation)
+    button_trim_rudder_left: 2     # X button - Trim rudder left
+    button_trim_rudder_right: 3    # Y button - Trim rudder right
+    
+    # Shoulder buttons
+    button_left_bumper: 4          # Left bumper (LB)
+    button_right_bumper: 5         # Right bumper (RB)
+    
+    # Menu buttons
+    button_exit: 8                 # Logitech button - Exit gamepad control node
+    button_pause_toggle: 7         # Start button - Toggle /pause
+    button_minus: 6                # Back button (currently unused)
+    
+    # D-pad buttons (F310 uses axes for D-pad, not buttons)
+    # Set to -1 since D-pad uses axes
+    button_dpad_up: -1             # D-pad up (uses axis)
+    button_dpad_down: -1           # D-pad down (uses axis)
+    button_dpad_left: -1           # D-pad left (uses axis)
+    button_dpad_right: -1          # D-pad right (uses axis)
+    
+    # =============================================================================
+    # AXIS MAPPINGS
+    # =============================================================================
+    # Axis indices for control inputs
+    # Negative values will be inverted (e.g., -0 means axis 0 inverted)
+    
+    # Left stick - typically used for throttle and rudder
+    axis_throttle: 1               # Left stick vertical (up = positive)
+    axis_rudder: 0                 # Left stick horizontal (left = positive)
+    
+    # Right stick - typically used for elevator and aileron  
+    axis_elevator: 4               # Right stick vertical (up = positive)
+    axis_aileron: 3                # Right stick horizontal (left = positive)
+    
+    # D-pad axes (F310 uses axes for D-pad)
+    axis_dpad_horizontal: 6        # D-pad horizontal (left = positive)
+    axis_dpad_vertical: 7          # D-pad vertical (up = positive)
+    
+    # Trigger axes (analog triggers)
+    # Note: F310 triggers are positive when unpressed, negative when pressed
+    axis_left_trigger: 2           # Left trigger (unpressed = positive)
+    axis_right_trigger: 5          # Right trigger (unpressed = positive)
+    
+    # =============================================================================
+    # AXIS INVERSION FLAGS
+    # =============================================================================
+    # Set to true to invert an axis (flip positive/negative)
+    # Useful if your controller's axes go the opposite direction
+    
+    invert_throttle: false         # Invert throttle axis (up is positive - correct)
+    invert_rudder: false           # Invert rudder axis (left is positive - correct)
+    invert_elevator: true          # Invert elevator axis (down should be positive for pitch down)
+    invert_aileron: true           # Invert aileron axis (right should be positive for right roll)
+    
+    # =============================================================================
+    # CONTROL PARAMETERS
+    # =============================================================================
+    
+    throttle_default: 0.0          # Default throttle when reset (0.0 = idle, 1.0 = full)
+    deadzone: 0.05                 # Stick deadzone (0.0 to 1.0)
+    trim_step: 0.005               # Trim adjustment per button press (radians, ~0.57 degrees)
+    throttle_step: 0.006           # Throttle increment per stick deflection (0.0 to 1.0)
+    throttle_deadzone: 0.1         # Deadzone for throttle increment/decrement mode (0.0 to 1.0)
+    throttle_exponent: 2.0         # Throttle exponential response curve (1.0=linear)
+    aileron_exponent: 1.5          # Aileron exponential response curve (1.0=linear)
+    elevator_exponent: 1.5         # Elevator exponential response curve (1.0=linear)
+    
+    # D-pad behavior
+    dpad_is_buttons: false         # F310 D-pad uses axes, not buttons
+    dpad_deadzone: 0.5             # Deadzone for D-pad axes
