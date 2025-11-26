@@ -1,6 +1,8 @@
 # Cubs2 Development Makefile
 # Convenience commands for building and testing using standard ROS 2 tools
 
+SHELL := /bin/bash
+
 # Cubs2 packages to build and test
 CUBS2_PACKAGES = cubs2_msgs cubs2_description cubs2_data cubs2_dynamics \
 	cubs2_control cubs2_simulation cubs2_planning cubs2_rviz \

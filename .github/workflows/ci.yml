@@ -78,8 +78,8 @@ jobs:
           # Install all system dependencies via rosdep, skipping workspace dependencies
           rosdep install --from-paths src --ignore-src -r -y
           
-          # Install pytest-cov for coverage reporting
-          apt-get install -y python3-pytest-cov
+          # Install pytest-cov for coverage reporting and scipy for cyecca
+          apt-get install -y python3-pytest-cov python3-scipy
 
       - name: Cache CasADi
         id: cache-casadi
