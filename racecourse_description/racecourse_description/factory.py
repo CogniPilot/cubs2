@@ -1,11 +1,27 @@
+# Copyright 2025 CogniPilot Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 # fixed_wing_purt/racecourse/factory.py
 
 import math
 
-import numpy as np
 from builtin_interfaces.msg import Duration
-from geometry_msgs.msg import Point, Pose, Quaternion
-from std_msgs.msg import ColorRGBA, Header
+from geometry_msgs.msg import Point
+from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Quaternion
+import numpy as np
+from std_msgs.msg import ColorRGBA
+from std_msgs.msg import Header
 from tf_transformations import quaternion_from_euler
 from visualization_msgs.msg import Marker
 
@@ -43,7 +59,7 @@ class MarkerFactory:
         m = Marker()
         m.header.frame_id = self.frame_id
         m.id = marker_id
-        m.ns = "racecourse"
+        m.ns = 'racecourse'
         m.type = Marker.MESH_RESOURCE
         m.action = Marker.ADD
         m.lifetime = Duration(sec=0)
@@ -92,7 +108,7 @@ class MarkerFactory:
         m = Marker()
         m.header.frame_id = self.frame_id
         m.id = marker_id
-        m.ns = "gate_direction"
+        m.ns = 'gate_direction'
         m.type = Marker.ARROW
         m.action = Marker.ADD
         m.lifetime = Duration(sec=0)
@@ -114,8 +130,13 @@ class MarkerFactory:
         return m
 
     def line_strip(
-        self, marker_id, points, stamp=None, ns="line_strip", line_width=0.1, color=None
-    ):
+            self,
+            marker_id,
+            points,
+            stamp=None,
+            ns='line_strip',
+            line_width=0.1,
+            color=None):
         """Create a LINE_STRIP marker from a list of points.
 
         Args:
@@ -143,7 +164,8 @@ class MarkerFactory:
         if points and isinstance(points[0], Point):
             m.points = points
         else:
-            m.points = [Point(x=float(p[0]), y=float(p[1]), z=float(p[2])) for p in points]
+            m.points = [Point(x=float(p[0]), y=float(
+                p[1]), z=float(p[2])) for p in points]
 
         return m
 
@@ -153,7 +175,7 @@ class MarkerFactory:
         position,
         heading,
         stamp=None,
-        ns="arrow",
+        ns='arrow',
         length=1.0,
         width=0.15,
         color=None,
@@ -195,7 +217,7 @@ class MarkerFactory:
         radius,
         z=0.0,
         stamp=None,
-        ns="circle",
+        ns='circle',
         line_width=0.1,
         color=None,
         num_points=51,
@@ -215,7 +237,8 @@ class MarkerFactory:
         """
         angles = np.linspace(0, 2 * np.pi, num_points)
         points = [
-            Point(x=center[0] + radius * np.cos(a), y=center[1] + radius * np.sin(a), z=z)
+            Point(x=center[0] + radius * np.cos(a),
+                  y=center[1] + radius * np.sin(a), z=z)
             for a in angles
         ]
 
@@ -223,5 +246,9 @@ class MarkerFactory:
             color = self.color(0.5, 0.5, 0.5, 1.0)
 
         return self.line_strip(
-            marker_id, points, stamp=stamp, ns=ns, line_width=line_width, color=color
-        )
+            marker_id,
+            points,
+            stamp=stamp,
+            ns=ns,
+            line_width=line_width,
+            color=color)

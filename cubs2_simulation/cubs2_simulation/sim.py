@@ -1,83 +1,102 @@
 #!/usr/bin/env python3
+# Copyright 2025 CogniPilot Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import copy
 
-import numpy as np
-import rclpy
 from builtin_interfaces.msg import Time
 from cubs2_control.closed_loop import closed_loop_sportcub
-from cubs2_dynamics.sportcub import SportCubOutputs
 from cubs2_msgs.msg import AircraftControl
-from geometry_msgs.msg import (
-    Point,
-    PoseStamped,
-    TransformStamped,
-    TwistStamped,
-    Vector3Stamped,
-)
+from geometry_msgs.msg import Point
+from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TwistStamped
+import numpy as np
+import rclpy
 from rclpy.node import Node
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool, ColorRGBA, Empty, Float32, Float64
+from std_msgs.msg import Bool
+from std_msgs.msg import ColorRGBA
+from std_msgs.msg import Empty
+from std_msgs.msg import Float32
+from std_msgs.msg import Float64
 from tf2_ros import TransformBroadcaster
-from visualization_msgs.msg import Marker, MarkerArray
+from visualization_msgs.msg import Marker
+from visualization_msgs.msg import MarkerArray
 
 
 class SimNode(Node):
     def __init__(self):
-        super().__init__(node_name="sim_node")
+        super().__init__(node_name='sim_node')
 
-        # Note: use_sim_time should NOT be set to true for the clock source node
+        # Note: use_sim_time should NOT be set to true for the clock source
+        # node
 
-        self.declare_parameter("dt", 0.01)  # Default 10ms, but GUI can override
-        self.dt = float(self.get_parameter("dt").value)
+        # Default 10ms, but GUI can override
+        self.declare_parameter('dt', 0.01)
+        self.dt = float(self.get_parameter('dt').value)
 
-        self.declare_parameter("show_forces", True)  # Toggle force/moment visualization
-        self.show_forces = bool(self.get_parameter("show_forces").value)
+        # Toggle force/moment visualization
+        self.declare_parameter('show_forces', True)
+        self.show_forces = bool(self.get_parameter('show_forces').value)
 
         # Trim parameters from config file
-        self.declare_parameter("controller.trim.aileron", 0.0)
-        self.declare_parameter("controller.trim.elevator", 0.0)
-        self.declare_parameter("controller.trim.rudder", 0.0)
+        self.declare_parameter('controller.trim.aileron', 0.0)
+        self.declare_parameter('controller.trim.elevator', 0.0)
+        self.declare_parameter('controller.trim.rudder', 0.0)
 
         # Initial pose parameters (ENU frame, yaw about +z)
-        self.declare_parameter("initial_position.x", 0.0)
-        self.declare_parameter("initial_position.y", 0.0)
-        self.declare_parameter("initial_position.z", 0.1)
-        self.declare_parameter("initial_yaw", 0.0)  # radians
+        self.declare_parameter('initial_position.x', 0.0)
+        self.declare_parameter('initial_position.y', 0.0)
+        self.declare_parameter('initial_position.z', 0.1)
+        self.declare_parameter('initial_yaw', 0.0)  # radians
 
-        self.initial_x = float(self.get_parameter("initial_position.x").value)
-        self.initial_y = float(self.get_parameter("initial_position.y").value)
-        self.initial_z = float(self.get_parameter("initial_position.z").value)
-        self.initial_yaw = float(self.get_parameter("initial_yaw").value)
+        self.initial_x = float(self.get_parameter('initial_position.x').value)
+        self.initial_y = float(self.get_parameter('initial_position.y').value)
+        self.initial_z = float(self.get_parameter('initial_position.z').value)
+        self.initial_yaw = float(self.get_parameter('initial_yaw').value)
 
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.sim_time_publisher = self.create_publisher(Clock, "/clock", 10)
+        self.sim_time_publisher = self.create_publisher(Clock, '/clock', 10)
         self.sim_time = 0.0
 
         # Force/moment marker publisher
         if self.show_forces:
             self.force_marker_publisher = self.create_publisher(
-                MarkerArray, "/vehicle/force_markers", 10
+                MarkerArray, '/vehicle/force_markers', 10
             )
 
         # Pose and velocity publishers for HUD panel
-        self.pose_publisher = self.create_publisher(PoseStamped, "/sportcub/pose", 10)
-        self.velocity_publisher = self.create_publisher(TwistStamped, "/sportcub/velocity", 10)
+        self.pose_publisher = self.create_publisher(
+            PoseStamped, '/sportcub/pose', 10)
+        self.velocity_publisher = self.create_publisher(
+            TwistStamped, '/sportcub/velocity', 10)
 
         self.reset_subscription = self.create_subscription(
-            Empty, "/reset", self.reset_topic_callback, 10
+            Empty, '/reset', self.reset_topic_callback, 10
         )
         self.pause_subscription = self.create_subscription(
-            Empty, "/pause", self.pause_topic_callback, 10
+            Empty, '/pause', self.pause_topic_callback, 10
         )
         self.sim_speed = 1.0
         self.speed_subscription = self.create_subscription(
-            Float64, "/set_speed", self.speed_topic_callback, 10
+            Float64, '/set_speed', self.speed_topic_callback, 10
         )
         self.dt_subscription = self.create_subscription(
-            Float64, "/set_dt", self.dt_topic_callback, 10
+            Float64, '/set_dt', self.dt_topic_callback, 10
         )
-        self.paused_publisher = self.create_publisher(Bool, "/sat/paused", 10)
+        self.paused_publisher = self.create_publisher(Bool, '/sat/paused', 10)
         self.resume()
 
         # Initialize closed-loop model (composed aircraft + controller)
@@ -91,19 +110,21 @@ class SimNode(Node):
         # State and inputs for composed model
         # For composed models, x0 is structured (x0.plant, x0.controller)
         # while x0_composed is the flat vector for integration
-        self.x = copy.deepcopy(self.model.x0)  # Structured state with submodel access
+        # Structured state with submodel access
+        self.x = copy.deepcopy(self.model.x0)
         self.u = copy.deepcopy(self.model.u0)  # External inputs
-        self.p = copy.deepcopy(self.model.p0)  # Parameters (empty for this model)
+        # Parameters (empty for this model)
+        self.p = copy.deepcopy(self.model.p0)
 
         # Apply trim parameters from config to controller submodel
-        self.model._submodels["controller"].p0.trim_aileron = float(
-            self.get_parameter("controller.trim.aileron").value
+        self.model._submodels['controller'].p0.trim_aileron = float(
+            self.get_parameter('controller.trim.aileron').value
         )
-        self.model._submodels["controller"].p0.trim_elevator = float(
-            self.get_parameter("controller.trim.elevator").value
+        self.model._submodels['controller'].p0.trim_elevator = float(
+            self.get_parameter('controller.trim.elevator').value
         )
-        self.model._submodels["controller"].p0.trim_rudder = float(
-            self.get_parameter("controller.trim.rudder").value
+        self.model._submodels['controller'].p0.trim_rudder = float(
+            self.get_parameter('controller.trim.rudder').value
         )
 
         # Plant-only state/inputs
@@ -124,24 +145,28 @@ class SimNode(Node):
         # Ready-for-takeoff start (taildragger sitting on its main wheels, no initial bounce).
         # World frame ENU (z up), ground plane z=0. Main wheels located at z=-0.1 in body frame, so
         # choosing CG z ≈ 0.1 puts both main wheels exactly on the ground with zero penetration.
-        # Tail wheel in current model sits at z=0 (should be below CG physically); this means tail wheel is raised.
-        # For a simple takeoff run this is acceptable; adjust dynamics wheel geometry later for visual accuracy.
+        # Tail wheel in current model sits at z=0 (should be below CG
+        # physically); this means tail wheel is raised.
+        # For a simple takeoff run this is acceptable; adjust dynamics wheel
+        # geometry later for visual accuracy.
 
         # Set initial plant state using structured access
         # (position and yaw are handled inside _apply_initial_pose)
 
-        # Subscribe to control messages (published by virtual joystick, gamepad, keyboard)
+        # Subscribe to control messages (published by virtual joystick,
+        # gamepad, keyboard)
         self.control_subscription = self.create_subscription(
-            AircraftControl, "/control", self.control_callback, 10
+            AircraftControl, '/control', self.control_callback, 10
         )
 
         # Subscribe to control mode (0=manual, 1=stabilized)
         self.mode_subscription = self.create_subscription(
-            Float32, "/control_mode", self.mode_callback, 10
+            Float32, '/control_mode', self.mode_callback, 10
         )
 
         # Joint state publisher for control surface and propeller animation
-        self.joint_state_publisher = self.create_publisher(JointState, "/vehicle/joint_states", 10)
+        self.joint_state_publisher = self.create_publisher(
+            JointState, '/vehicle/joint_states', 10)
 
         # Propeller rotation state
         self.propeller_angle = 0.0
@@ -187,7 +212,8 @@ class SimNode(Node):
         sim_time_msg = Clock()
         sim_time_msg.clock = Time()
         sim_time_msg.clock.sec = int(self.sim_time)
-        sim_time_msg.clock.nanosec = int((self.sim_time - int(self.sim_time)) * 1e9)
+        sim_time_msg.clock.nanosec = int(
+            (self.sim_time - int(self.sim_time)) * 1e9)
         return sim_time_msg
 
     def control_callback(self, msg: AircraftControl):
@@ -206,8 +232,8 @@ class SimNode(Node):
         # Debug: Log throttle input
         if abs(self.u.thr_manual) > 0.01:
             self.get_logger().info(
-                f"Control input - throttle: {self.u.thr_manual:.3f}, "
-                f"ail: {self.u.ail_manual:.3f}, elev: {self.u.elev_manual:.3f}"
+                f'Control input - throttle: {self.u.thr_manual:.3f}, '
+                f'ail: {self.u.ail_manual:.3f}, elev: {self.u.elev_manual:.3f}'
             )
 
     def mode_callback(self, msg: Float32):
@@ -231,21 +257,24 @@ class SimNode(Node):
         propeller_rpm = self.thr_cmd * 2000.0  # Max 2000 RPM at full throttle
         propeller_omega = propeller_rpm * 2.0 * np.pi / 60.0  # Convert to rad/s
         self.propeller_angle += propeller_omega * self.dt
-        self.propeller_angle = self.propeller_angle % (2.0 * np.pi)  # Wrap to [0, 2π]
+        self.propeller_angle = self.propeller_angle % (
+            2.0 * np.pi)  # Wrap to [0, 2π]
 
         # Joint names and positions
         joint_state.name = [
-            "propeller_joint",
-            "left_aileron_joint",
-            "right_aileron_joint",
-            "elevator_joint",
-            "rudder_joint",
+            'propeller_joint',
+            'left_aileron_joint',
+            'right_aileron_joint',
+            'elevator_joint',
+            'rudder_joint',
         ]
 
         joint_state.position = [
             self.propeller_angle,
-            -aileron_deflection,  # Left aileron (negative for positive roll command)
-            aileron_deflection,  # Right aileron (positive for positive roll command)
+            # Left aileron (negative for positive roll command)
+            -aileron_deflection,
+            # Right aileron (positive for positive roll command)
+            aileron_deflection,
             elevator_deflection,  # Elevator
             rudder_deflection,  # Rudder
         ]
@@ -278,7 +307,16 @@ class SimNode(Node):
             zero_time = rclpy.time.Time().to_msg()
 
             # Helper to create arrow marker for forces
-            def create_force_arrow(marker_id, name, vec, color, scale=1.0, offset=(0.0, 0.0, 0.0)):
+            def create_force_arrow(
+                marker_id,
+                name,
+                vec,
+                color,
+                scale=1.0,
+                offset=(
+                    0.0,
+                    0.0,
+                    0.0)):
                 """Create arrow marker for force vector."""
                 magnitude = np.linalg.norm(vec)
 
@@ -287,9 +325,9 @@ class SimNode(Node):
                     return None
 
                 marker = Marker()
-                marker.header.frame_id = "vehicle"
+                marker.header.frame_id = 'vehicle'
                 marker.header.stamp = zero_time  # Frame locking enabled
-                marker.ns = "forces"
+                marker.ns = 'forces'
                 marker.id = marker_id
                 marker.type = Marker.ARROW
                 marker.action = Marker.ADD
@@ -328,9 +366,9 @@ class SimNode(Node):
                     return None
 
                 marker = Marker()
-                marker.header.frame_id = "vehicle"
+                marker.header.frame_id = 'vehicle'
                 marker.header.stamp = zero_time
-                marker.ns = "moments"
+                marker.ns = 'moments'
                 marker.id = marker_id
                 marker.type = Marker.LINE_STRIP
                 marker.action = Marker.ADD
@@ -363,7 +401,12 @@ class SimNode(Node):
                     angle = (i / (num_points - 1)) * angle_range
                     # Point on circle in the perpendicular plane
                     point = radius * (np.cos(angle) * u + np.sin(angle) * v)
-                    points.append(Point(x=float(point[0]), y=float(point[1]), z=float(point[2])))
+                    points.append(
+                        Point(
+                            x=float(
+                                point[0]), y=float(
+                                point[1]), z=float(
+                                point[2])))
 
                 # Add arrowhead at the end by creating small segments
                 last_point = points[-1]
@@ -376,7 +419,8 @@ class SimNode(Node):
                 arrow_right = -arrow_left
 
                 # Add arrow tip lines
-                tip_center = np.array([last_point.x, last_point.y, last_point.z])
+                tip_center = np.array(
+                    [last_point.x, last_point.y, last_point.z])
                 points.append(
                     Point(
                         x=float(tip_center[0] + arrow_left[0]),
@@ -411,18 +455,23 @@ class SimNode(Node):
             # Force markers (at CG) - 5x longer than before (was 0.2, now 1.0)
             force_scale = 1.0  # 1m per Newton (5x increase from 20cm)
             markers_to_add = [
-                create_force_arrow(0, "force_aero", FA_b, blue, force_scale),
-                create_force_arrow(1, "force_thrust", FT_b, orange, force_scale),
-                create_force_arrow(2, "force_weight", FW_b, purple, force_scale),
+                create_force_arrow(0, 'force_aero', FA_b, blue, force_scale),
+                create_force_arrow(1, 'force_thrust', FT_b,
+                                   orange, force_scale),
+                create_force_arrow(2, 'force_weight', FW_b,
+                                   purple, force_scale),
             ]
 
             # Moment markers as curved arcs - increased scale for visibility
             moment_scale = 2.0  # 2m radius per N·m (increased from 0.5m)
             markers_to_add.extend(
                 [
-                    create_moment_arc(3, "moment_aero", MA_b, blue, moment_scale),
-                    create_moment_arc(4, "moment_thrust", MT_b, orange, moment_scale),
-                    create_moment_arc(5, "moment_weight", MW_b, purple, moment_scale),
+                    create_moment_arc(3, 'moment_aero', MA_b,
+                                      blue, moment_scale),
+                    create_moment_arc(4, 'moment_thrust',
+                                      MT_b, orange, moment_scale),
+                    create_moment_arc(5, 'moment_weight',
+                                      MW_b, purple, moment_scale),
                 ]
             )
 
@@ -434,16 +483,16 @@ class SimNode(Node):
             self.force_marker_publisher.publish(marker_array)
 
         except Exception as e:
-            self.get_logger().debug(f"Failed to publish force/moment markers: {e}")
+            self.get_logger().debug(
+                f'Failed to publish force/moment markers: {e}')
 
     def step_simulation(self):
         """Step the simulation and publish transforms and diagnostics."""
-
         self.sim_time += self.dt
         sim_time_msg = self.get_sim_time_msg()
         self.sim_time_publisher.publish(sim_time_msg)
 
-        self.get_logger().debug(f"sim time: {self.sim_time:.2f}s")
+        self.get_logger().debug(f'sim time: {self.sim_time:.2f}s')
 
         # TEMPORARY: Use plant-only model in manual mode (mode=0) for demo
         use_plant_only = self.u.mode < 0.5
@@ -454,14 +503,16 @@ class SimNode(Node):
             u_vec = self.u_cl.as_vec()
             p_vec = self.p_cl.as_vec()
 
-            x_next = self.cl_model.f_step(x=x_vec, u=u_vec, p=p_vec, dt=self.dt)
-            x_next_vec = x_next["x_next"]
+            x_next = self.cl_model.f_step(
+                x=x_vec, u=u_vec, p=p_vec, dt=self.dt)
+            x_next_vec = x_next['x_next']
 
             # Check for NaN or invalid values
             if np.any(np.isnan(x_next_vec)) or np.any(np.isinf(x_next_vec)):
                 self.get_logger().error(
-                    f"NaN or Inf detected in plant state at t={self.sim_time:.3f}s!\n"
-                    "Pausing simulation."
+                    f'NaN or Inf detected in plant state at t={
+                        self.sim_time:.3f}s!\n'
+                    'Pausing simulation.'
                 )
                 self.pause()
                 return
@@ -472,17 +523,19 @@ class SimNode(Node):
             offset = 0
             for field_obj in fields(self.x_cl):
                 field_val = getattr(self.x_cl, field_obj.name)
-                field_size = field_val.shape[0] if hasattr(field_val, "shape") else 1
-                setattr(self.x_cl, field_obj.name, x_next_vec[offset : offset + field_size])
+                field_size = field_val.shape[0] if hasattr(
+                    field_val, 'shape') else 1
+                setattr(self.x_cl, field_obj.name,
+                        x_next_vec[offset: offset + field_size])
                 offset += field_size
 
             # Sync plant state to composed model (for when mode switches)
             self.x.plant = copy.deepcopy(self.x_cl)
 
             # Compute outputs from plant
-            if hasattr(self.cl_model, "f_y"):
+            if hasattr(self.cl_model, 'f_y'):
                 result = self.cl_model.f_y(x=x_vec, u=u_vec, p=p_vec)
-                output_vec = result["y"]
+                output_vec = result['y']
 
                 from cubs2_dynamics.sportcub import SportCubOutputs
 
@@ -500,7 +553,7 @@ class SimNode(Node):
         else:
             # Use closed-loop model (aircraft + controller)
             # Sync plant state from manual mode if switching
-            if hasattr(self, "_was_plant_only") and self._was_plant_only:
+            if hasattr(self, '_was_plant_only') and self._was_plant_only:
                 self.x.plant = copy.deepcopy(self.x_cl)
 
             # Convert structured state to vector for integration
@@ -509,13 +562,14 @@ class SimNode(Node):
             p_vec = self.p.as_vec()
 
             x_next = self.model.f_step(x=x_vec, u=u_vec, p=p_vec, dt=self.dt)
-            x_next_vec = x_next["x_next"]
+            x_next_vec = x_next['x_next']
 
             # Check for NaN or invalid values
             if np.any(np.isnan(x_next_vec)) or np.any(np.isinf(x_next_vec)):
                 self.get_logger().error(
-                    f"NaN or Inf detected in state at t={self.sim_time:.3f}s!\n"
-                    "Pausing simulation."
+                    f'NaN or Inf detected in state at t={
+                        self.sim_time:.3f}s!\n'
+                    'Pausing simulation.'
                 )
                 self.pause()
                 return
@@ -527,10 +581,10 @@ class SimNode(Node):
             self.x_cl = copy.deepcopy(self.x.plant)
 
             # Compute outputs from composed model
-            if hasattr(self.model, "f_y"):
+            if hasattr(self.model, 'f_y'):
                 try:
                     result = self.model.f_y(x=x_vec, u=u_vec, p=p_vec)
-                    output_vec = result["y"]
+                    output_vec = result['y']
 
                     from cubs2_control.closed_loop import ClosedLoopOutputs
 
@@ -544,22 +598,23 @@ class SimNode(Node):
 
                     # Store forces/moments for visualization
                     self.last_outputs = type(
-                        "obj",
+                        'obj',
                         (object,),
                         {
-                            "FA_b": outputs.F,
-                            "FT_b": np.zeros(3),
-                            "FW_b": np.zeros(3),
-                            "MA_b": outputs.M,
-                            "MT_b": np.zeros(3),
-                            "MW_b": np.zeros(3),
+                            'FA_b': outputs.F,
+                            'FT_b': np.zeros(3),
+                            'FW_b': np.zeros(3),
+                            'MA_b': outputs.M,
+                            'MT_b': np.zeros(3),
+                            'MW_b': np.zeros(3),
                         },
                     )()
                 except Exception as e:
                     import traceback
 
                     self.get_logger().warn(
-                        f"Failed to compute outputs: {e}\n{traceback.format_exc()}"
+                        f'Failed to compute outputs: {
+                            e}\n{traceback.format_exc()}'
                     )
 
         self._was_plant_only = use_plant_only
@@ -576,8 +631,8 @@ class SimNode(Node):
         q = self.x.plant.r  # quaternion (world->body) stored as [w, x, y, z]
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = "map"
-        t.child_frame_id = "vehicle"  # Match URDF parent frame
+        t.header.frame_id = 'map'
+        t.child_frame_id = 'vehicle'  # Match URDF parent frame
         t.transform.translation.x = float(pos[0])
         t.transform.translation.y = float(pos[1])
         t.transform.translation.z = float(pos[2])
@@ -598,7 +653,7 @@ class SimNode(Node):
         # Publish pose for HUD panel
         pose_msg = PoseStamped()
         pose_msg.header.stamp = self.get_clock().now().to_msg()
-        pose_msg.header.frame_id = "map"
+        pose_msg.header.frame_id = 'map'
         pose_msg.pose.position.x = float(pos[0])
         pose_msg.pose.position.y = float(pos[1])
         pose_msg.pose.position.z = float(pos[2])
@@ -612,7 +667,7 @@ class SimNode(Node):
         vel = self.x.plant.v  # velocity in world frame
         velocity_msg = TwistStamped()
         velocity_msg.header.stamp = self.get_clock().now().to_msg()
-        velocity_msg.header.frame_id = "map"
+        velocity_msg.header.frame_id = 'map'
         velocity_msg.twist.linear.x = float(vel[0])
         velocity_msg.twist.linear.y = float(vel[1])
         velocity_msg.twist.linear.z = float(vel[2])
@@ -648,8 +703,8 @@ class SimNode(Node):
         q = self.x.plant.r
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = "map"
-        t.child_frame_id = "vehicle"
+        t.header.frame_id = 'map'
+        t.child_frame_id = 'vehicle'
         t.transform.translation.x = float(pos[0])
         t.transform.translation.y = float(pos[1])
         t.transform.translation.z = float(pos[2])
@@ -672,7 +727,7 @@ class SimNode(Node):
             self.timer.cancel()
         except Exception:
             pass
-        self.get_logger().info("paused")
+        self.get_logger().info('paused')
         try:
             self.paused_publisher.publish(Bool(data=True))
         except Exception:
@@ -680,8 +735,9 @@ class SimNode(Node):
 
     def resume(self):
         """Resume the simulation."""
-        self.timer = self.create_timer(self.dt / self.sim_speed, self.step_simulation)
-        self.get_logger().info("running")
+        self.timer = self.create_timer(
+            self.dt / self.sim_speed, self.step_simulation)
+        self.get_logger().info('running')
         self.paused = False
         try:
             self.paused_publisher.publish(Bool(data=False))
@@ -699,7 +755,7 @@ class SimNode(Node):
         """Update sim speed multiplier."""
         self.pause()
         self.sim_speed = max(0.01, float(msg.data))
-        self.get_logger().info(f"sim speed set to {self.sim_speed:.2f}x")
+        self.get_logger().info(f'sim speed set to {self.sim_speed:.2f}x')
         self.resume()
 
     def dt_topic_callback(self, msg):
@@ -707,13 +763,13 @@ class SimNode(Node):
         self.pause()
         new_dt = max(0.001, float(msg.data))  # Minimum 1ms time step
         self.dt = new_dt
-        self.get_logger().info(f"time step set to {self.dt:.3f}s")
+        self.get_logger().info(f'time step set to {self.dt:.3f}s')
         self.resume()
 
     def reset_topic_callback(self, msg):
         """Reset the  initial conditions (topic interface for RViz)."""
-        self.get_logger().info("resetting to initial conditions (via /reset topic)...")
-        was_running = not getattr(self, "paused", True)
+        self.get_logger().info('resetting to initial conditions (via /reset topic)...')
+        was_running = not getattr(self, 'paused', True)
         self.pause()
 
         # Reset clock
@@ -741,16 +797,17 @@ class SimNode(Node):
         self.u_cl.ail = 0.0
         self.u_cl.rud = 0.0
 
-        # Publish visuals immediately so RViz reflects new initial state while paused
+        # Publish visuals immediately so RViz reflects new initial state while
+        # paused
         self.publish_visuals()
-        self.get_logger().info("reset complete (clock restarted at t=0.0s)")
+        self.get_logger().info('reset complete (clock restarted at t=0.0s)')
 
         # Resume only if we were running before reset
         if was_running:
-            self.get_logger().info("auto-resuming simulation after reset (was running before)")
+            self.get_logger().info('auto-resuming simulation after reset (was running before)')
             self.resume()
         else:
-            self.get_logger().info("simulation remains paused after reset")
+            self.get_logger().info('simulation remains paused after reset')
 
 
 def main(args=None):
@@ -767,5 +824,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

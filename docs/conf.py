@@ -1,3 +1,16 @@
+# Copyright 2025 CogniPilot Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -8,23 +21,23 @@ import sys
 
 # -- Path setup --------------------------------------------------------------
 # Add package to path for autodoc
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath('..'))
 
 # -- Project information -----------------------------------------------------
-project = "Cubs2"
-copyright = "2025, James Goppert"
-author = "James Goppert"
-release = "0.1.0"
+project = 'Cubs2'
+copyright = '2025, James Goppert'  # noqa: A001
+author = 'James Goppert'
+release = '0.1.0'
 
 # -- General configuration ---------------------------------------------------
 extensions = [
-    "sphinx.ext.autodoc",
-    "sphinx.ext.autosummary",
-    "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
-    "sphinx.ext.intersphinx",
-    "sphinx.ext.mathjax",
-    "myst_parser",  # For Markdown support
+    'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
+    'sphinx.ext.napoleon',
+    'sphinx.ext.viewcode',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.mathjax',
+    'myst_parser',  # For Markdown support
 ]
 
 # Napoleon settings for Google/NumPy style docstrings
@@ -47,44 +60,44 @@ autosummary_imported_members = False
 
 # MyST settings
 myst_enable_extensions = [
-    "colon_fence",
-    "deflist",
-    "dollarmath",
-    "fieldlist",
-    "html_admonition",
-    "html_image",
-    "linkify",
-    "replacements",
-    "smartquotes",
-    "strikethrough",
-    "substitution",
-    "tasklist",
+    'colon_fence',
+    'deflist',
+    'dollarmath',
+    'fieldlist',
+    'html_admonition',
+    'html_image',
+    'linkify',
+    'replacements',
+    'smartquotes',
+    'strikethrough',
+    'substitution',
+    'tasklist',
 ]
 
-templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+templates_path = ['_templates']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # Intersphinx mapping
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
-    "casadi": ("https://web.casadi.org/docs/", None),
+    'python': ('https://docs.python.org/3', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'casadi': ('https://web.casadi.org/docs/', None),
 }
 
 # -- Options for HTML output -------------------------------------------------
-html_theme = "sphinx_rtd_theme"
-html_static_path = ["_static"]
+html_theme = 'sphinx_rtd_theme'
+html_static_path = ['_static']
 html_logo = None
 html_theme_options = {
-    "logo_only": False,
-    "display_version": True,
-    "prev_next_buttons_location": "bottom",
-    "style_external_links": False,
-    "collapse_navigation": False,
-    "sticky_navigation": True,
-    "navigation_depth": 4,
-    "includehidden": True,
-    "titles_only": False,
+    'logo_only': False,
+    'display_version': True,
+    'prev_next_buttons_location': 'bottom',
+    'style_external_links': False,
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+    'navigation_depth': 4,
+    'includehidden': True,
+    'titles_only': False,
 }
 
 # Additional HTML options
@@ -95,5 +108,5 @@ html_show_copyright = True
 # -- Options for LaTeX output ------------------------------------------------
 latex_elements = {}
 latex_documents = [
-    ("index", "cubs2.tex", "Cubs2 Documentation", "James Goppert", "manual"),
+    ('index', 'cubs2.tex', 'Cubs2 Documentation', 'James Goppert', 'manual'),
 ]

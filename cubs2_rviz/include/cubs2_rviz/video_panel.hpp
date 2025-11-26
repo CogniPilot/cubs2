@@ -1,5 +1,18 @@
-#ifndef CUBS2_RVIZ_VIDEO_PANEL_HPP
-#define CUBS2_RVIZ_VIDEO_PANEL_HPP
+// Copyright 2025 CogniPilot Foundation
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+#ifndef CUBS2_RVIZ__VIDEO_PANEL_HPP_
+#define CUBS2_RVIZ__VIDEO_PANEL_HPP_
 
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
@@ -12,7 +25,11 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+
 #include <memory>
+#include <string>
+#include <vector>
+
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/display_context.hpp>
 #include <rviz_common/panel.hpp>
@@ -93,4 +110,4 @@ private:
 
 }  // namespace cubs2
 
-#endif  // CUBS2_RVIZ_VIDEO_PANEL_HPP
+#endif  // CUBS2_RVIZ__VIDEO_PANEL_HPP_

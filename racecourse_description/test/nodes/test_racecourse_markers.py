@@ -1,12 +1,23 @@
+# Copyright 2025 CogniPilot Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Unit tests for RacecourseNode."""
-
 import os
 import tempfile
 
 import pytest
-import rclpy
 from racecourse_description.racecourse_markers import RacecourseNode
-from rclpy.executors import SingleThreadedExecutor
+import rclpy
 
 
 @pytest.fixture
@@ -21,14 +32,14 @@ def ros_context():
 def temp_racecourse_yaml():
     """Create a temporary racecourse YAML file for testing."""
     yaml_content = """
-frame_id: "map"
+frame_id: 'map'
 
 meshes:
-  gate: "package://fixed_wing_purt/resources/meshes/gate.glb"
+  gate: 'package://fixed_wing_purt/resources/meshes/gate.glb'
 
 generic:
-  - name: "start_finish_line"
-    mesh: "package://fixed_wing_purt/resources/meshes/gate.glb"
+  - name: 'start_finish_line'
+    mesh: 'package://fixed_wing_purt/resources/meshes/gate.glb'
     position: [0.0, 0.0, 0.0]
     rpy: [0.0, 0.0, 0.0]
     scale: [1.0, 1.0, 1.0]
@@ -36,14 +47,13 @@ generic:
     alpha: 1.0
 
 gates:
-  - name: "gate_0"
+  - name: 'gate_0'
     center: [10.0, 0.0, 2.0]
     yaw: 0.0
     width: 5.0
 """
-
     # Create temporary file
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(yaml_content)
         temp_path = f.name
 
@@ -63,24 +73,22 @@ class TestRacecourseNode:
         import os
         import pathlib
 
-        from racecourse_description import MarkerFactory, RacecourseLoader
-
         # Get the package root directory (test is in test/nodes/)
         test_dir = pathlib.Path(__file__).parent
         package_root = test_dir.parent.parent
-        yaml_path = package_root / "config" / "racecourse.yaml"
+        yaml_path = package_root / 'config' / 'racecourse.yaml'
 
         # Verify the file exists
-        assert yaml_path.exists(), f"racecourse.yaml not found at {yaml_path}"
+        assert yaml_path.exists(), f'racecourse.yaml not found at {yaml_path}'
 
-        # Change to package root so the default "racecourse.yaml" can be resolved
+        # Change to package root so the default 'racecourse.yaml' can be resolved
         # by creating a symlink in the current directory
         original_cwd = os.getcwd()
         try:
             os.chdir(package_root)
 
             # Create a temporary symlink to the actual file
-            symlink_path = package_root / "racecourse.yaml"
+            symlink_path = package_root / 'racecourse.yaml'
             # Remove existing file/symlink if present
             if symlink_path.exists() or symlink_path.is_symlink():
                 symlink_path.unlink()
@@ -91,7 +99,7 @@ class TestRacecourseNode:
                 node = RacecourseNode()
 
                 # Verify node was created correctly
-                assert node.get_name() == "racecourse_markers_pub"
+                assert node.get_name() == 'racecourse_markers_pub'
                 assert node.loader is not None
                 assert node.factory is not None
 
@@ -109,10 +117,8 @@ class TestRacecourseNode:
         with pytest.raises(FileNotFoundError):
             node = RacecourseNode()
             # Force parameter to non-existent file
-            node.declare_parameter("course_yaml", "/nonexistent/file.yaml")
+            node.declare_parameter('course_yaml', '/nonexistent/file.yaml')
             # Try to access the parameter (would trigger load in __init__)
-            yaml_path = node.get_parameter("course_yaml").value
-
             # In actual __init__, this would fail during loader creation
             # For this test, we verify the exception is raised
 
@@ -125,15 +131,17 @@ class TestRacecourseNode:
         loader = RacecourseLoader(temp_racecourse_yaml)
 
         # Verify loader loaded the data
-        assert hasattr(loader, "frame_id")
-        assert loader.frame_id == "map"
-        assert hasattr(loader, "gates")
+        assert hasattr(loader, 'frame_id')
+        assert loader.frame_id == 'map'
+        assert hasattr(loader, 'gates')
         assert len(loader.gates) > 0
-        assert hasattr(loader, "generic")
+        assert hasattr(loader, 'generic')
 
-    def test_marker_factory_initialization(self, ros_context, temp_racecourse_yaml):
+    def test_marker_factory_initialization(
+            self, ros_context, temp_racecourse_yaml):
         """Test that MarkerFactory is initialized correctly."""
-        from racecourse_description import MarkerFactory, RacecourseLoader
+        from racecourse_description import MarkerFactory
+        from racecourse_description import RacecourseLoader
 
         loader = RacecourseLoader(temp_racecourse_yaml)
         factory = MarkerFactory(loader.frame_id)
@@ -147,7 +155,8 @@ class TestRacecourseNode:
         # we'll create a modified test that doesn't instantiate the node
         # but verifies the publish logic would work
 
-        from racecourse_description import MarkerFactory, RacecourseLoader
+        from racecourse_description import MarkerFactory
+        from racecourse_description import RacecourseLoader
         from visualization_msgs.msg import MarkerArray
 
         loader = RacecourseLoader(temp_racecourse_yaml)
@@ -181,14 +190,14 @@ class TestRacecourseNode:
         from rclpy.node import Node
 
         # Create a simple node to test parameter declaration
-        node = Node("test_node")
-        node.declare_parameter("course_yaml", "test.yaml")
+        node = Node('test_node')
+        node.declare_parameter('course_yaml', 'test.yaml')
 
-        param_value = node.get_parameter("course_yaml").value
-        assert param_value == "test.yaml"
+        param_value = node.get_parameter('course_yaml').value
+        assert param_value == 'test.yaml'
 
         node.destroy_node()
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])

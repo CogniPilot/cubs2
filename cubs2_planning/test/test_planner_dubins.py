@@ -1,11 +1,20 @@
+# Copyright 2025 CogniPilot Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Unit tests for DubinsGatePlannerNode."""
-
-import numpy as np
+from cubs2_planning.planner_dubins import DubinsGatePlannerNode
 import pytest
 import rclpy
-from cubs2_planning.planner_dubins import DubinsGatePlannerNode
-from rclpy.executors import SingleThreadedExecutor
-from rclpy.parameter import Parameter
 
 
 @pytest.fixture
@@ -28,28 +37,28 @@ class TestDubinsGatePlannerNode:
             node = DubinsGatePlannerNode()
 
             # Verify node name
-            assert node.get_name() == "dubins_gate_planner"
+            assert node.get_name() == 'dubins_gate_planner'
 
             # Verify parameters were declared
-            assert node.has_parameter("racecourse_yaml")
-            assert node.has_parameter("turn_radius")
-            assert node.has_parameter("sample_points")
-            assert node.has_parameter("planner.altitude")
-            assert node.has_parameter("planner.velocity")
+            assert node.has_parameter('racecourse_yaml')
+            assert node.has_parameter('turn_radius')
+            assert node.has_parameter('sample_points')
+            assert node.has_parameter('planner.altitude')
+            assert node.has_parameter('planner.velocity')
 
             # Verify planning functions were created
-            assert hasattr(node, "plan_fn")
-            assert hasattr(node, "eval_fn")
+            assert hasattr(node, 'plan_fn')
+            assert hasattr(node, 'eval_fn')
 
             # Verify segments were planned
-            assert hasattr(node, "segments")
+            assert hasattr(node, 'segments')
 
         except FileNotFoundError as e:
             # If racecourse YAML not found, skip this test
-            pytest.skip(f"Racecourse YAML not found: {e}")
+            pytest.skip(f'Racecourse YAML not found: {e}')
         finally:
             # Ensure node is destroyed even if test fails
-            if "node" in locals():
+            if 'node' in locals():
                 node.destroy_node()
 
     def test_parameters(self, ros_context):
@@ -58,10 +67,10 @@ class TestDubinsGatePlannerNode:
             node = DubinsGatePlannerNode()
 
             # Get parameter values
-            turn_radius = node.get_parameter("turn_radius").value
-            sample_points = node.get_parameter("sample_points").value
-            altitude = node.get_parameter("planner.altitude").value
-            velocity = node.get_parameter("planner.velocity").value
+            turn_radius = node.get_parameter('turn_radius').value
+            sample_points = node.get_parameter('sample_points').value
+            altitude = node.get_parameter('planner.altitude').value
+            velocity = node.get_parameter('planner.velocity').value
 
             # Verify reasonable defaults
             assert turn_radius > 0.0
@@ -70,9 +79,9 @@ class TestDubinsGatePlannerNode:
             assert velocity > 0.0
 
         except FileNotFoundError:
-            pytest.skip("Racecourse YAML not found")
+            pytest.skip('Racecourse YAML not found')
         finally:
-            if "node" in locals():
+            if 'node' in locals():
                 node.destroy_node()
 
     def test_dubins_functions_exist(self, ros_context):
@@ -85,9 +94,9 @@ class TestDubinsGatePlannerNode:
             assert callable(node.eval_fn)
 
         except FileNotFoundError:
-            pytest.skip("Racecourse YAML not found")
+            pytest.skip('Racecourse YAML not found')
         finally:
-            if "node" in locals():
+            if 'node' in locals():
                 node.destroy_node()
 
     def test_trajectory_planning(self, ros_context):
@@ -100,13 +109,13 @@ class TestDubinsGatePlannerNode:
             assert isinstance(node.segments, list)
 
             # If gates exist, should have segments
-            if hasattr(node, "racecourse") and len(node.racecourse.gates) > 0:
+            if hasattr(node, 'racecourse') and len(node.racecourse.gates) > 0:
                 assert len(node.segments) > 0
 
         except FileNotFoundError:
-            pytest.skip("Racecourse YAML not found")
+            pytest.skip('Racecourse YAML not found')
         finally:
-            if "node" in locals():
+            if 'node' in locals():
                 node.destroy_node()
 
     def test_gate_sequence_parameter(self, ros_context):
@@ -114,13 +123,13 @@ class TestDubinsGatePlannerNode:
         try:
             node = DubinsGatePlannerNode()
 
-            gate_sequence = node.get_parameter("planner.gate_sequence").value
+            gate_sequence = node.get_parameter('planner.gate_sequence').value
             assert isinstance(gate_sequence, list)
 
         except FileNotFoundError:
-            pytest.skip("Racecourse YAML not found")
+            pytest.skip('Racecourse YAML not found')
         finally:
-            if "node" in locals():
+            if 'node' in locals():
                 node.destroy_node()
 
     def test_reference_frame_parameter(self, ros_context):
@@ -128,16 +137,16 @@ class TestDubinsGatePlannerNode:
         try:
             node = DubinsGatePlannerNode()
 
-            ref_frame = node.get_parameter("reference_frame_id").value
+            ref_frame = node.get_parameter('reference_frame_id').value
             assert isinstance(ref_frame, str)
             assert len(ref_frame) > 0
 
         except FileNotFoundError:
-            pytest.skip("Racecourse YAML not found")
+            pytest.skip('Racecourse YAML not found')
         finally:
-            if "node" in locals():
+            if 'node' in locals():
                 node.destroy_node()
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])

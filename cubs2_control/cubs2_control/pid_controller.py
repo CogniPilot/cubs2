@@ -1,64 +1,81 @@
+# Copyright 2025 CogniPilot Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """PID rate controller for aircraft."""
-
-import casadi as ca
 from beartype import beartype
-from cyecca.dynamics import ModelSX, input_var, output_var, param, state, symbolic
+import casadi as ca
+from cyecca.dynamics import input_var
+from cyecca.dynamics import ModelSX
+from cyecca.dynamics import output_var
+from cyecca.dynamics import param
+from cyecca.dynamics import state
+from cyecca.dynamics import symbolic
 
 
 @symbolic
 class PIDStates:
-    i_roll: ca.SX = state(1, 0.0, "roll rate integral")
-    i_pitch: ca.SX = state(1, 0.0, "pitch rate integral")
-    i_yaw: ca.SX = state(1, 0.0, "yaw rate integral")
-    i_speed: ca.SX = state(1, 0.0, "speed integral")
+    i_roll: ca.SX = state(1, 0.0, 'roll rate integral')
+    i_pitch: ca.SX = state(1, 0.0, 'pitch rate integral')
+    i_yaw: ca.SX = state(1, 0.0, 'yaw rate integral')
+    i_speed: ca.SX = state(1, 0.0, 'speed integral')
 
 
 @symbolic
 class PIDInputs:
-    roll_ref: ca.SX = input_var(desc="roll rate ref (rad/s)")
-    pitch_ref: ca.SX = input_var(desc="pitch rate ref (rad/s)")
-    yaw_ref: ca.SX = input_var(desc="yaw rate ref (rad/s)")
-    speed_ref: ca.SX = input_var(desc="speed ref (m/s)")
-    roll_meas: ca.SX = input_var(desc="roll rate meas (rad/s)")
-    pitch_meas: ca.SX = input_var(desc="pitch rate meas (rad/s)")
-    yaw_meas: ca.SX = input_var(desc="yaw rate meas (rad/s)")
-    speed_meas: ca.SX = input_var(desc="speed meas (m/s)")
-    d_roll_meas: ca.SX = input_var(desc="d/dt roll rate (rad/s^2)")
-    d_pitch_meas: ca.SX = input_var(desc="d/dt pitch rate (rad/s^2)")
-    d_yaw_meas: ca.SX = input_var(desc="d/dt yaw rate (rad/s^2)")
-    d_speed_meas: ca.SX = input_var(desc="d/dt speed (m/s^2)")
+    roll_ref: ca.SX = input_var(desc='roll rate ref (rad/s)')
+    pitch_ref: ca.SX = input_var(desc='pitch rate ref (rad/s)')
+    yaw_ref: ca.SX = input_var(desc='yaw rate ref (rad/s)')
+    speed_ref: ca.SX = input_var(desc='speed ref (m/s)')
+    roll_meas: ca.SX = input_var(desc='roll rate meas (rad/s)')
+    pitch_meas: ca.SX = input_var(desc='pitch rate meas (rad/s)')
+    yaw_meas: ca.SX = input_var(desc='yaw rate meas (rad/s)')
+    speed_meas: ca.SX = input_var(desc='speed meas (m/s)')
+    d_roll_meas: ca.SX = input_var(desc='d/dt roll rate (rad/s^2)')
+    d_pitch_meas: ca.SX = input_var(desc='d/dt pitch rate (rad/s^2)')
+    d_yaw_meas: ca.SX = input_var(desc='d/dt yaw rate (rad/s^2)')
+    d_speed_meas: ca.SX = input_var(desc='d/dt speed (m/s^2)')
 
 
 @symbolic
 class PIDParams:
-    Kp_roll: ca.SX = param(2.5, "P gain roll")
-    Ki_roll: ca.SX = param(0.8, "I gain roll")
-    Kd_roll: ca.SX = param(0.2, "D gain roll")
-    Kp_pitch: ca.SX = param(3.0, "P gain pitch")
-    Ki_pitch: ca.SX = param(0.9, "I gain pitch")
-    Kd_pitch: ca.SX = param(0.25, "D gain pitch")
-    Kp_yaw: ca.SX = param(1.8, "P gain yaw")
-    Ki_yaw: ca.SX = param(0.5, "I gain yaw")
-    Kd_yaw: ca.SX = param(0.15, "D gain yaw")
-    Kp_speed: ca.SX = param(0.7, "P gain speed")
-    Ki_speed: ca.SX = param(0.3, "I gain speed")
-    Kd_speed: ca.SX = param(0.05, "D gain speed")
-    ail_min: ca.SX = param(-0.5, "ail min (rad)")
-    ail_max: ca.SX = param(0.5, "ail max (rad)")
-    elev_min: ca.SX = param(-0.5, "elev min (rad)")
-    elev_max: ca.SX = param(0.5, "elev max (rad)")
-    rud_min: ca.SX = param(-0.5, "rud min (rad)")
-    rud_max: ca.SX = param(0.5, "rud max (rad)")
-    thr_min: ca.SX = param(0.0, "thr min")
-    thr_max: ca.SX = param(1.0, "thr max")
+    Kp_roll: ca.SX = param(2.5, 'P gain roll')
+    Ki_roll: ca.SX = param(0.8, 'I gain roll')
+    Kd_roll: ca.SX = param(0.2, 'D gain roll')
+    Kp_pitch: ca.SX = param(3.0, 'P gain pitch')
+    Ki_pitch: ca.SX = param(0.9, 'I gain pitch')
+    Kd_pitch: ca.SX = param(0.25, 'D gain pitch')
+    Kp_yaw: ca.SX = param(1.8, 'P gain yaw')
+    Ki_yaw: ca.SX = param(0.5, 'I gain yaw')
+    Kd_yaw: ca.SX = param(0.15, 'D gain yaw')
+    Kp_speed: ca.SX = param(0.7, 'P gain speed')
+    Ki_speed: ca.SX = param(0.3, 'I gain speed')
+    Kd_speed: ca.SX = param(0.05, 'D gain speed')
+    ail_min: ca.SX = param(-0.5, 'ail min (rad)')
+    ail_max: ca.SX = param(0.5, 'ail max (rad)')
+    elev_min: ca.SX = param(-0.5, 'elev min (rad)')
+    elev_max: ca.SX = param(0.5, 'elev max (rad)')
+    rud_min: ca.SX = param(-0.5, 'rud min (rad)')
+    rud_max: ca.SX = param(0.5, 'rud max (rad)')
+    thr_min: ca.SX = param(0.0, 'thr min')
+    thr_max: ca.SX = param(1.0, 'thr max')
 
 
 @symbolic
 class PIDOutputs:
-    ail: ca.SX = output_var(desc="aileron (rad)")
-    elev: ca.SX = output_var(desc="elevator (rad)")
-    rud: ca.SX = output_var(desc="rudder (rad)")
-    thr: ca.SX = output_var(desc="throttle")
+    ail: ca.SX = output_var(desc='aileron (rad)')
+    elev: ca.SX = output_var(desc='elevator (rad)')
+    rud: ca.SX = output_var(desc='rudder (rad)')
+    thr: ca.SX = output_var(desc='throttle')
 
 
 @beartype
@@ -71,7 +88,8 @@ def pid_controller() -> ModelSX:
     Returns:
         ModelSX: PID controller model with integral states and control outputs
     """
-    model = ModelSX.create(PIDStates, PIDInputs, PIDParams, output_type=PIDOutputs)
+    model = ModelSX.create(PIDStates, PIDInputs,
+                           PIDParams, output_type=PIDOutputs)
 
     x, u, p, y = model.x, model.u, model.p, model.y
 
@@ -88,7 +106,12 @@ def pid_controller() -> ModelSX:
         p.ail_max,
     )
     y.elev = model.saturate(
-        p.Kp_pitch * e_pitch + p.Ki_pitch * x.i_pitch - p.Kd_pitch * u.d_pitch_meas,
+        p.Kp_pitch *
+        e_pitch +
+        p.Ki_pitch *
+        x.i_pitch -
+        p.Kd_pitch *
+        u.d_pitch_meas,
         p.elev_min,
         p.elev_max,
     )
@@ -98,19 +121,24 @@ def pid_controller() -> ModelSX:
         p.rud_max,
     )
     y.thr = model.saturate(
-        p.Kp_speed * e_speed + p.Ki_speed * x.i_speed - p.Kd_speed * u.d_speed_meas,
+        p.Kp_speed *
+        e_speed +
+        p.Ki_speed *
+        x.i_speed -
+        p.Kd_speed *
+        u.d_speed_meas,
         p.thr_min,
         p.thr_max,
     )
 
-    model.build(f_x=f_x, f_y=y.as_vec(), integrator="euler")
+    model.build(f_x=f_x, f_y=y.as_vec(), integrator='euler')
     return model
 
 
 __all__ = [
-    "pid_controller",
-    "PIDStates",
-    "PIDInputs",
-    "PIDParams",
-    "PIDOutputs",
+    'pid_controller',
+    'PIDStates',
+    'PIDInputs',
+    'PIDParams',
+    'PIDOutputs',
 ]

@@ -1,13 +1,24 @@
+# Copyright 2025 CogniPilot Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Unit tests for SimNode."""
-
+from cubs2_msgs.msg import AircraftControl
+from cubs2_simulation.sim import SimNode
 import numpy as np
 import pytest
 import rclpy
-from cubs2_msgs.msg import AircraftControl
-from cubs2_simulation.sim import SimNode
-from rclpy.executors import SingleThreadedExecutor
-from rosgraph_msgs.msg import Clock
-from std_msgs.msg import Bool, Empty, Float64
+from std_msgs.msg import Empty
+from std_msgs.msg import Float64
 
 
 @pytest.fixture
@@ -26,27 +37,28 @@ class TestSimNode:
         node = SimNode()
 
         # Verify node name
-        assert node.get_name() == "sim_node"
+        assert node.get_name() == 'sim_node'
 
         # Verify parameters were declared
-        assert node.has_parameter("dt")
-        assert node.has_parameter("show_forces")
+        assert node.has_parameter('dt')
+        assert node.has_parameter('show_forces')
 
         # Verify default values
         assert node.dt == 0.01  # Default 10ms
-        assert node.show_forces == True
+        assert node.show_forces
 
         # Verify initial state
         assert node.sim_time == 0.0
         assert not node.paused
 
         # Verify model is initialized (composed closed-loop model)
-        assert hasattr(node, "model")
-        assert hasattr(node, "x")
-        assert hasattr(node, "u")
-        assert hasattr(node, "p")
+        assert hasattr(node, 'model')
+        assert hasattr(node, 'x')
+        assert hasattr(node, 'u')
+        assert hasattr(node, 'p')
 
-        # Verify initial position for takeoff (CG at 0.1m so wheels touch ground)
+        # Verify initial position for takeoff (CG at 0.1m so wheels touch
+        # ground)
         assert np.isclose(node.x.plant.p[2], 0.1)
 
         node.destroy_node()
@@ -58,12 +70,12 @@ class TestSimNode:
         node = SimNode()
 
         # Verify we can get parameter values
-        dt_value = node.get_parameter("dt").value
-        show_forces_value = node.get_parameter("show_forces").value
+        dt_value = node.get_parameter('dt').value
+        show_forces_value = node.get_parameter('show_forces').value
 
         # Verify default values (set in __init__)
         assert dt_value == 0.01
-        assert show_forces_value == True
+        assert show_forces_value
 
         node.destroy_node()
 
@@ -73,7 +85,6 @@ class TestSimNode:
 
         # Store initial state
         initial_time = node.sim_time
-        initial_pos = np.array(node.x.plant.p)
 
         # Step simulation once
         node.step_simulation()
@@ -144,7 +155,8 @@ class TestSimNode:
 
         # Verify reset to initial conditions
         assert node.sim_time == 0.0
-        assert np.isclose(node.x.plant.p[2], 0.1)  # CG height for wheels on ground
+        # CG height for wheels on ground
+        assert np.isclose(node.x.plant.p[2], 0.1)
         assert np.isclose(node.x.plant.v[0], 0.0)
         assert np.isclose(node.x.plant.v[1], 0.0)
         assert np.isclose(node.x.plant.v[2], 0.0)
@@ -162,7 +174,6 @@ class TestSimNode:
         msg.data = 2.0
 
         # Call callback
-        initial_paused = node.paused
         node.speed_topic_callback(msg)
 
         # Verify speed was updated
@@ -254,7 +265,8 @@ class TestSimNode:
         node = SimNode()
 
         # Verify quaternion attribute exists and is accessible (in plant submodel)
-        # The node accesses x.plant.r (attitude quaternion field in SportCubStatesQuat)
+        # The node accesses x.plant.r (attitude quaternion field in
+        # SportCubStatesQuat)
 
         # Access quaternion (should not raise AttributeError)
         q = node.x.plant.r
@@ -274,15 +286,15 @@ class TestSimNode:
         node.step_simulation()
 
         # Verify outputs were computed if f_y exists
-        if hasattr(node.model, "f_y"):
+        if hasattr(node.model, 'f_y'):
             assert node.last_outputs is not None
             # Outputs is an object (not dict) with force attributes
-            assert hasattr(node.last_outputs, "FA_b")  # Aero force
-            assert hasattr(node.last_outputs, "FT_b")  # Thrust force
-            assert hasattr(node.last_outputs, "FW_b")  # Weight force
+            assert hasattr(node.last_outputs, 'FA_b')  # Aero force
+            assert hasattr(node.last_outputs, 'FT_b')  # Thrust force
+            assert hasattr(node.last_outputs, 'FW_b')  # Weight force
 
         node.destroy_node()
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])
