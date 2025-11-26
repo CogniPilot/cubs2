@@ -92,7 +92,7 @@ def pid_controller() -> ModelSX:
 
     """
     model = ModelSX.create(PIDStates, PIDInputs,
-                           PIDParams, output_type=PIDOutputs)
+                           PIDParams, PIDOutputs)
 
     x, u, p, y = model.x, model.u, model.p, model.y
 

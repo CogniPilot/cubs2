@@ -216,15 +216,15 @@ class TestClosedLoopTrim:
         out_cl = closed_loop.output_type.from_vec(outputs_cl)
 
         print(f'  Open-loop forces:   {out_plant.F_b}')
-        print(f'  Closed-loop forces: {out_cl.F}')
+        print(f'  Closed-loop forces: {out_cl.F_b}')
         np.testing.assert_allclose(
-            out_plant.F_b, out_cl.F, rtol=1e-2, atol=1e-3)
+            out_plant.F_b, out_cl.F_b, rtol=1e-2, atol=1e-3)
         print('  ✓ Forces match')
 
         print(f'  Open-loop moments:   {out_plant.M_b}')
-        print(f'  Closed-loop moments: {out_cl.M}')
+        print(f'  Closed-loop moments: {out_cl.M_b}')
         np.testing.assert_allclose(
-            out_plant.M_b, out_cl.M, rtol=1e-2, atol=1e-3)
+            out_plant.M_b, out_cl.M_b, rtol=1e-2, atol=1e-3)
         print('  ✓ Moments match')
 
         print(f'\n  Open-loop:   Vt={out_plant.Vt:.3f} m/s, CL={

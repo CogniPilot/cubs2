@@ -39,7 +39,7 @@ test:
 	cd ../.. && colcon test-result --verbose
 
 test-verbose:
-	cd ../.. && colcon test --packages-select $(CUBS2_PACKAGES) --event-handlers console_direct+
+	cd ../.. && colcon test --packages-select $(CUBS2_PACKAGES) --event-handlers console_cohesion+
 	cd ../.. && colcon test-result --verbose
 
 coverage:

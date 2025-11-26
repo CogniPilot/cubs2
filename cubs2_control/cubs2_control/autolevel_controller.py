@@ -127,7 +127,7 @@ def autolevel_controller() -> ModelSX:
         AutolevelStates,
         AutolevelInputs,
         AutolevelParams,
-        output_type=AutolevelOutputs)
+        AutolevelOutputs)
 
     x, u, p, y = model.x, model.u, model.p, model.y
 

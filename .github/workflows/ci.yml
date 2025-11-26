@@ -123,7 +123,8 @@ jobs:
           . /opt/ros/jazzy/setup.sh
           . install/setup.sh
           cd src/cubs2
-          make test-verbose
+          colcon test --packages-select cubs2_msgs cubs2_description cubs2_data cubs2_dynamics cubs2_control cubs2_simulation cubs2_planning cubs2_rviz racecourse_description cubs2_bringup --event-handlers console_cohesion+
+          colcon test-result --verbose
 
       - name: Generate coverage report
         run: |

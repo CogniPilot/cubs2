@@ -51,29 +51,27 @@ class TestSportCubNode:
         initial_z = 0.30
         x_state.p[2] = initial_z
         u_vec = model.u0.as_vec()
-        p_vec = model.p0.as_vec()
 
         dt = 0.02  # Increased from 0.01 - we have 100 substeps so 0.02s outer step is fine
         # Reduced from 300 since we increased dt (same total time)
         n_steps = 150
         total_time = dt * n_steps
 
-        def u_func(t, x, p):
+        def u_func(t, model):
             return u_vec
 
         model.x0 = model.state_type.from_vec(x_state.as_vec())
-        result = model.simulate(
+        model = model.simulate(
             t0=0.0,
             tf=total_time,
             dt=dt,
             u_func=u_func,
-            p_vec=p_vec,
         )
 
-        states = model.state_type.from_matrix(result['x'])
-        z_series = np.array([s.p[2] for s in states])
-        xy_series = np.array([np.linalg.norm(s.p[:2]) for s in states])
-        v_mags = np.array([np.linalg.norm(s.v) for s in states])
+        traj = model.trajectory
+        z_series = traj.x.p[:, 2]
+        xy_series = np.linalg.norm(traj.x.p[:, :2], axis=1)
+        v_mags = np.linalg.norm(traj.x.v, axis=1)
 
         min_z = float(np.min(z_series))
         max_z = float(np.max(z_series))
@@ -85,7 +83,7 @@ class TestSportCubNode:
             xy_series[half_idx:] < 0.02)
         settled = bool(settled_mask.any())
 
-        x_final = model.state_type.from_vec(result['x'][:, -1])
+        x_final = model.x0
         assert min_z > - \
             0.05, f'Unexpected penetration below ground: min_z={min_z:.3f}'
         assert (
@@ -112,26 +110,24 @@ class TestSportCubNode:
         for h0 in drop_heights:
             x_state = model.state_type.from_vec(model.x0.as_vec())
             x_state.p[2] = h0
-            p_vec = model.p0.as_vec()
             u_vec = model.u0.as_vec()
             total_time = dt * max_steps
 
-            def u_func(t, x, p):
+            def u_func(t, model):
                 return u_vec
 
             model.x0 = model.state_type.from_vec(x_state.as_vec())
-            result = model.simulate(
+            model_result = model.simulate(
                 t0=0.0,
                 tf=total_time,
                 dt=dt,
                 u_func=u_func,
-                p_vec=p_vec,
             )
 
-            states = model.state_type.from_matrix(result['x'])
-            z_series = np.array([s.p[2] for s in states])
-            vz_series = np.array([s.v[2] for s in states])
-            v_mags = np.array([np.linalg.norm(s.v) for s in states])
+            traj = model_result.trajectory
+            z_series = traj.x.p[:, 2]
+            vz_series = traj.x.v[:, 2]
+            v_mags = np.linalg.norm(traj.x.v, axis=1)
 
             first_contact = False
             rebound_found = False
@@ -306,8 +302,8 @@ class TestSportCubNode:
         kd_phi = 12.0  # Roll damping
         kd_rud = 5.0  # Yaw damping (coordinated flight)
 
-        def u_func(t, x_vec, p):
-            st = model.state_type.from_vec(x_vec)
+        def u_func(t, sim_model):
+            st = sim_model.x0
             euler = lie.SO3EulerB321.from_Quat(lie.SO3Quat.elem(ca.DM(st.r)))
             # euler.param is [psi, theta, phi]
             phi = float(euler.param[2])
@@ -332,21 +328,19 @@ class TestSportCubNode:
 
         x0_pos = x_state.p.copy()
 
-        result = model.simulate(
+        model = model.simulate(
             t0=0.0,
             tf=3.0,  # Reduced from 5.0s - still enough to demonstrate glide behavior
             dt=0.05,  # Increased from 0.02 - we have 100 substeps so 0.05s outer step is fine
             u_func=u_func,
-            p_vec=model.p0.as_vec(),
+            compute_output=True,
         )
 
-        times = result['t']
-        x_traj = result['x']
-        state_traj = model.state_type.from_matrix(x_traj)
-
-        positions = np.array([s.p for s in state_traj])
-        velocities = np.array([s.v for s in state_traj])
-        attitudes = np.array([s.r for s in state_traj])  # quaternions in x.r
+        traj = model.trajectory
+        times = traj.t
+        positions = traj.x.p  # Already (n_steps, 3)
+        velocities = traj.x.v  # Already (n_steps, 3)
+        attitudes = traj.x.r  # Already (n_steps, 4) for quaternions
 
         altitudes = positions[:, 2]
         # Compute horizontal distance from starting position
@@ -380,8 +374,7 @@ class TestSportCubNode:
                           ) if pitch_angles else 0.0
 
         # Angle-of-attack series for stall guard
-        out_traj = model.output_type.from_matrix(result['out'])
-        alpha_series = [out.alpha for out in out_traj]
+        alpha_series = traj.y.alpha.squeeze()  # Now (n_steps,) after squeeze
         max_alpha_deg = np.degrees(np.max(np.abs(alpha_series)))
 
         # Velocity variation check
@@ -442,7 +435,6 @@ class TestSportCubNode:
         model = sportcub()
         x = copy.deepcopy(model.x0)
         u = copy.deepcopy(model.u0)
-        p = copy.deepcopy(model.p0)
         x.p[2] = 0.1  # CG altitude so main wheels at z=0
         x.v[:] = 0.0
         u.thr = 0.0
@@ -458,15 +450,15 @@ class TestSportCubNode:
         tail_world_z = x.p[2] + tail_wheel_b[2]
         assert tail_world_z > 0.0
         u_vec = u.as_vec()
-        p_vec = p.as_vec()
 
-        def u_func(t, x_state_vec, p):
+        def u_func(t, sim_model):
             return u_vec
 
         model.x0 = model.state_type.from_vec(x.as_vec())
-        sim = model.simulate(t0=0.0, tf=0.001, dt=0.001,
-                             u_func=u_func, p_vec=p_vec)
-        x_next = model.state_type.from_vec(sim['x'][:, -1])
+        model = model.simulate(
+            t0=0.0, tf=0.001, dt=0.001,
+            u_func=u_func)
+        x_next = model.x0
         assert x_next.v[2] <= 1e-6, f'Unexpected upward vertical velocity: {
             x_next.v[2]}'
 

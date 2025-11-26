@@ -35,14 +35,32 @@ class ClosedLoopInputs:
 
 @symbolic
 class ClosedLoopOutputs:
-    """Outputs from closed-loop system (actuator commands and forces/moments)."""
+    """Outputs from closed-loop system (actuator commands and all aircraft outputs)."""
 
+    # Control commands
     ail: ca.SX = output_var(desc='aileron command to aircraft [-1, 1]')
     elev: ca.SX = output_var(desc='elevator command to aircraft [-1, 1]')
     rud: ca.SX = output_var(desc='rudder command to aircraft [-1, 1]')
     thr: ca.SX = output_var(desc='throttle command to aircraft [0, 1]')
-    F: ca.SX = output_var(3, desc='total force on aircraft (N)')
-    M: ca.SX = output_var(3, desc='total moment on aircraft (N⋅m)')
+
+    # Aircraft outputs (from SportCubOutputs)
+    Vt: ca.SX = output_var(desc='airspeed (m/s)')
+    alpha: ca.SX = output_var(desc='angle of attack (rad)')
+    beta: ca.SX = output_var(desc='sideslip (rad)')
+    qbar: ca.SX = output_var(desc='dynamic pressure (Pa)')
+    q: ca.SX = output_var(4, desc='quaternion (w,x,y,z) for ROS2 compatibility')
+    CL: ca.SX = output_var(desc='lift coefficient')
+    CD: ca.SX = output_var(desc='drag coefficient')
+    FA_b: ca.SX = output_var(3, desc='aero force body (N)')
+    FG_b: ca.SX = output_var(3, desc='ground force body (N)')
+    FT_b: ca.SX = output_var(3, desc='thrust force body (N)')
+    FW_b: ca.SX = output_var(3, desc='weight force body (N)')
+    F_b: ca.SX = output_var(3, desc='total force body (N)')
+    MA_b: ca.SX = output_var(3, desc='aero moment body (N·m)')
+    MG_b: ca.SX = output_var(3, desc='ground moment body (N·m)')
+    MT_b: ca.SX = output_var(3, desc='thrust moment body (N·m)')
+    MW_b: ca.SX = output_var(3, desc='weight moment body (N·m)')
+    M_b: ca.SX = output_var(3, desc='total moment body (N·m)')
 
 
 @beartype
@@ -87,13 +105,30 @@ def closed_loop_sportcub() -> ModelSX:
     parent.connect('plant.u.rud', 'controller.y.rud')
     parent.connect('plant.u.thr', 'controller.y.thr')
 
-    # Connect parent outputs
+    # Connect parent outputs - control commands from controller
     parent.connect('y.ail', 'controller.y.ail')
     parent.connect('y.elev', 'controller.y.elev')
     parent.connect('y.rud', 'controller.y.rud')
     parent.connect('y.thr', 'controller.y.thr')
-    parent.connect('y.F', 'plant.y.F_b')
-    parent.connect('y.M', 'plant.y.M_b')
+
+    # Connect parent outputs - all aircraft outputs from plant
+    parent.connect('y.Vt', 'plant.y.Vt')
+    parent.connect('y.alpha', 'plant.y.alpha')
+    parent.connect('y.beta', 'plant.y.beta')
+    parent.connect('y.qbar', 'plant.y.qbar')
+    parent.connect('y.q', 'plant.y.q')
+    parent.connect('y.CL', 'plant.y.CL')
+    parent.connect('y.CD', 'plant.y.CD')
+    parent.connect('y.FA_b', 'plant.y.FA_b')
+    parent.connect('y.FG_b', 'plant.y.FG_b')
+    parent.connect('y.FT_b', 'plant.y.FT_b')
+    parent.connect('y.FW_b', 'plant.y.FW_b')
+    parent.connect('y.F_b', 'plant.y.F_b')
+    parent.connect('y.MA_b', 'plant.y.MA_b')
+    parent.connect('y.MG_b', 'plant.y.MG_b')
+    parent.connect('y.MT_b', 'plant.y.MT_b')
+    parent.connect('y.MW_b', 'plant.y.MW_b')
+    parent.connect('y.M_b', 'plant.y.M_b')
 
     # Build the composed model with single integration loop
     parent.build_composed(integrator='rk4')
