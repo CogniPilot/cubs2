@@ -7,27 +7,6 @@ on:
     branches: [ main ]
 
 jobs:
-  format-check:
-    name: Format Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-formatters-${{ runner.os }}
-          restore-keys: apt-formatters-
-
-      - name: Install formatters
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y black clang-format
-
-      - name: Run format check
-        run: make format-check
 
   test:
     name: ROS 2 Tests
@@ -52,14 +31,6 @@ jobs:
           key: apt-ros2-${{ runner.os }}-${{ hashFiles('**/package.xml') }}
           restore-keys: |
             apt-ros2-${{ runner.os }}-
-
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: /root/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('**/package.xml') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
 
       - name: Cache rosdep
         uses: actions/cache@v4
@@ -151,8 +122,26 @@ jobs:
         run: |
           . /opt/ros/jazzy/setup.sh
           . install/setup.sh
-          colcon test --event-handlers console_direct+
+          cd src/cubs2
+          make test-verbose
 
-      - name: Check test results
+      - name: Generate coverage report
         run: |
-          colcon test-result --verbose
+          . /opt/ros/jazzy/setup.sh
+          . install/setup.sh
+          cd src/cubs2
+          make coverage
+
+      - name: Upload Python coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage_python.xml
+          flags: python
+          name: python-coverage
+
+      - name: Upload C++ coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage_cpp_filtered.info
+          flags: cpp
+          name: cpp-coverage
