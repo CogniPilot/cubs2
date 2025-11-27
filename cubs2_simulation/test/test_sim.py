@@ -59,7 +59,7 @@ class TestSimNode:
 
         # Verify initial position for takeoff (CG at 0.1m so wheels touch
         # ground)
-        assert np.isclose(node.model.x0.p[2], 0.1)
+        assert np.isclose(node.model.v0.p[2], 0.1)
 
         node.destroy_node()
 
@@ -95,7 +95,7 @@ class TestSimNode:
         # State may change slightly due to dynamics (even at rest, there
         # might be numerical drift)
         # Just verify no NaN or inf values
-        x_vec = node.model.x0.as_vec()
+        x_vec = node.model.v0.as_vec()
         assert np.all(np.isfinite(x_vec))
 
         node.destroy_node()
@@ -145,9 +145,9 @@ class TestSimNode:
 
         # Modify state
         node.sim_time = 5.0
-        node.model.x0.p[0] = 10.0
-        node.model.x0.p[1] = 5.0
-        node.model.x0.p[2] = 2.0
+        node.model.v0.p[0] = 10.0
+        node.model.v0.p[1] = 5.0
+        node.model.v0.p[2] = 2.0
         node.model.u0.thr = 0.8
 
         # Reset via topic callback
@@ -157,10 +157,10 @@ class TestSimNode:
         # Verify reset to initial conditions
         assert node.sim_time == 0.0
         # CG height for wheels on ground
-        assert np.isclose(node.model.x0.p[2], 0.1)
-        assert np.isclose(node.model.x0.v[0], 0.0)
-        assert np.isclose(node.model.x0.v[1], 0.0)
-        assert np.isclose(node.model.x0.v[2], 0.0)
+        assert np.isclose(node.model.v0.p[2], 0.1)
+        assert np.isclose(node.model.v0.v[0], 0.0)
+        assert np.isclose(node.model.v0.v[1], 0.0)
+        assert np.isclose(node.model.v0.v[2], 0.0)
         assert np.isclose(node.model.u0.thr, 0.0)
         assert np.isclose(node.model.u0.elev, 0.0)
 
@@ -277,7 +277,7 @@ class TestSimNode:
         # SportCubStatesQuat)
 
         # Access quaternion (should not raise AttributeError)
-        q = node.model.x0.r
+        q = node.model.v0.r
 
         # Verify it's a valid quaternion (4 elements, normalized)
         assert len(q) == 4

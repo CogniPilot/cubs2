@@ -15,9 +15,6 @@
 from typing import Literal
 
 from beartype import beartype
-
-AttitudeRep = Literal['quat', 'euler']
-import casadi as ca
 from cyecca.dynamics.explicit import explicit
 from cyecca.dynamics.explicit import input_var
 from cyecca.dynamics.explicit import Model
@@ -26,23 +23,27 @@ from cyecca.dynamics.explicit import param
 from cyecca.dynamics.explicit import state
 import cyecca.lie as lie
 from cyecca.lie.group_so3 import SO3DcmLieGroupElement
+import cyecca.sym as cy
 import numpy as np
+
+AttitudeRep = Literal['quat', 'euler']
 
 # ============================================================================
 # Unified SportCub Model Classes
 # ============================================================================
 
+
 @explicit
 class _Base:
     # States
-    #==========================================================
+    # =========================================================
     p: float = state(3, [0, 0, 0], 'position in earth frame ENU (m)')
     v: float = state(3, [0, 0, 0], 'velocity in earth frame ENU (m/s)')
     w: float = state(3, [0, 0, 0], 'angular velocity in body frame FLU (rad/s)')
     # rotation will be defined in subclasses
 
     # Inputs
-    #==========================================================
+    # =========================================================
     ail: float = input_var(desc='aileron (normalized -1 to 1)')
     elev: float = input_var(desc='elevator (normalized -1 to 1)')
     rud: float = input_var(desc='rudder (normalized -1 to 1)')
@@ -115,10 +116,12 @@ class _Base:
     ground_c_xy: float = param(0.05, desc='lateral damping (N·s/m)')
     ground_mu: float = param(0.15, desc='friction coefficient')
     ground_max_force_per_wheel: float = param(20.0, desc='max normal force per wheel (N)')
-    tailwheel_steer_gain: float = param(0.03, desc='tail wheel steering effectiveness (moment/rad)')
+    tailwheel_steer_gain: float = param(
+        0.03, desc='tail wheel steering effectiveness (moment/rad)'
+    )
 
     # Outputs
-    #==========================================================
+    # =========================================================
     Vt: float = output_var(desc='airspeed (m/s)')
     alpha: float = output_var(desc='angle of attack (rad)')
     beta: float = output_var(desc='sideslip (rad)')
@@ -137,14 +140,18 @@ class _Base:
     MW_b: float = output_var(3, desc='weight moment body (N·m)')
     M_b: float = output_var(3, desc='total moment body (N·m)')
 
+
 @explicit
 class SportCubQuat(_Base):
     """Quaternion attitude representation."""
+
     r: float = state(4, [1, 0, 0, 0], 'quaternion [w,x,y,z] (ROS2 convention)')
+
 
 @explicit
 class SportCubEuler(_Base):
     """Euler angle attitude representation."""
+
     r: float = state(3, [0, 0, 0], 'Euler angles [psi,theta,phi] (rad)')
 
 
@@ -154,14 +161,14 @@ class SportCubEuler(_Base):
 
 
 @beartype
-def clamp(val: ca.SX, low: ca.SX | int | float,
-          high: ca.SX | int | float) -> ca.SX:
-    return ca.fmin(ca.fmax(val, low), high)
+def clamp(val: cy.SXType, low: cy.SXType | int | float,
+          high: cy.SXType | int | float) -> cy.SXType:
+    return cy.fmin(cy.fmax(val, low), high)
 
 
 @beartype
 def casadi_min_withcargo(
-        costs: list[ca.SX], cargos: list[ca.SX]) -> tuple[ca.SX, ca.SX]:
+        costs: list[cy.SXType], cargos: list[cy.SXType]) -> tuple[cy.SXType, cy.SXType]:
     """Branch-free CasADi minimum with associated cargo."""
     if len(costs) == 1:
         return costs[0], cargos[0]
@@ -171,51 +178,53 @@ def casadi_min_withcargo(
 
     for i in range(1, len(costs)):
         is_lower = costs[i] < current_min_cost
-        current_min_cost = ca.if_else(is_lower, costs[i], current_min_cost)
-        current_mincargo = ca.if_else(is_lower, cargos[i], current_mincargo)
+        current_min_cost = cy.if_else(is_lower, costs[i], current_min_cost)
+        current_mincargo = cy.if_else(is_lower, cargos[i], current_mincargo)
 
     return current_min_cost, current_mincargo
 
 
 @beartype
-def flu_to_frd(v_flu: ca.SX) -> ca.SX:
+def flu_to_frd(v_flu: cy.SXType) -> cy.SXType:
     """Convert ROS FLU to classical FRD."""
-    return ca.vertcat(v_flu[0], -v_flu[1], -v_flu[2])
+    return cy.vertcat(v_flu[0], -v_flu[1], -v_flu[2])
 
 
 @beartype
-def frd_to_flu(v_frd: ca.SX) -> ca.SX:
+def frd_to_flu(v_frd: cy.SXType) -> cy.SXType:
     """Convert classical FRD back to ROS FLU."""
-    return ca.vertcat(v_frd[0], -v_frd[1], -v_frd[2])
+    return cy.vertcat(v_frd[0], -v_frd[1], -v_frd[2])
 
 
 @beartype
 def wind_axes_from_velocity_frd(
-    v_frd: ca.SX, eps: float = 1e-6
-) -> tuple[ca.SX, ca.SX, ca.SX, ca.SX]:
+    v_frd: cy.SXType, eps: float = 1e-6
+) -> tuple[cy.SXType, cy.SXType, cy.SXType, cy.SXType]:
     """Build wind-frame DCM from velocity vector (FRD convention)."""
     U, V, W = v_frd[0], v_frd[1], v_frd[2]
-    Vt = ca.norm_2(v_frd) + eps
+    Vt = cy.norm_2(v_frd) + eps
     w_x = v_frd / Vt
 
+    # Import casadi for SX type - needed for zeros initialization
+    import casadi as ca
     b_x = ca.SX([1, 0, 0])
     b_z = ca.SX([0, 0, 1])
 
-    cost_z = ca.fabs(ca.dot(w_x, b_z))
-    cost_x = ca.fabs(ca.dot(w_x, b_x))
+    cost_z = cy.fabs(cy.dot(w_x, b_z))
+    cost_x = cy.fabs(cy.dot(w_x, b_x))
 
     _, ref = casadi_min_withcargo([cost_z, cost_x], [b_z, b_x])
 
-    ref_parallel = ca.dot(ref, w_x) * w_x
+    ref_parallel = cy.dot(ref, w_x) * w_x
     w_z_temp = ref - ref_parallel
-    w_z = w_z_temp / (ca.norm_2(w_z_temp) + eps)
-    w_y = ca.cross(w_z, w_x)
+    w_z = w_z_temp / (cy.norm_2(w_z_temp) + eps)
+    w_y = cy.cross(w_z, w_x)
 
-    R_b_wind = ca.horzcat(w_x, w_y, w_z)
+    R_b_wind = cy.horzcat(w_x, w_y, w_z)
 
-    V_xz = ca.sqrt(U * U + W * W) + eps
-    alpha = ca.atan2(W, U)
-    beta = ca.atan2(V, V_xz)
+    V_xz = cy.sqrt(U * U + W * W) + eps
+    alpha = cy.atan2(W, U)
+    beta = cy.atan2(V, V_xz)
 
     return R_b_wind, Vt, alpha, beta
 
@@ -232,7 +241,7 @@ def _compute_aero_coefficients(
     Cnb, Cndr, Cnda, Cnp, Cnr,
     CYb, CYda, CYdr, CYp, CYr,
     max_defl_ail, max_defl_elev, max_defl_rud,
-) -> dict[str, ca.SX]:
+) -> dict[str, cy.SXType]:
     """Compute aerodynamic coefficients with smooth stall model."""
     # Convert body angular rates to FRD convention
     w_b_frd = flu_to_frd(w_sym)
@@ -243,14 +252,14 @@ def _compute_aero_coefficients(
     elev_rad = clamp(max_defl_elev * elev_sym, -max_defl_elev, max_defl_elev)
     rud_rad = clamp(max_defl_rud * rud_sym * -1, -max_defl_rud, max_defl_rud)
 
-    sigma = (1 + ca.tanh((alpha - alpha_stall) / blend_width)) / 2
+    sigma = (1 + cy.tanh((alpha - alpha_stall) / blend_width)) / 2
 
     CL_lin = CL0 + CLa * alpha
-    CL_fp = 2 * ca.sin(alpha) * ca.cos(alpha)
+    CL_fp = 2 * cy.sin(alpha) * cy.cos(alpha)
     CL = (1 - sigma) * CL_lin + sigma * CL_fp
 
     CD_lin = CD0 + k_ind * CL_lin**2
-    CD_fp_val = CD0_fp + 2 * ca.sin(alpha) ** 2
+    CD_fp_val = CD0_fp + 2 * cy.sin(alpha) ** 2
     CD = (1 - sigma) * CD_lin + sigma * CD_fp_val
 
     CY_lin = (
@@ -260,7 +269,7 @@ def _compute_aero_coefficients(
         CYp * (span / (2 * Vt)) * P +
         CYr * (span / (2 * Vt)) * R
     )
-    CY_fp_val = CY_fp * ca.sin(beta) * ca.cos(alpha)
+    CY_fp_val = CY_fp * cy.sin(beta) * cy.cos(alpha)
     CY = (1 - sigma) * CY_lin + sigma * CY_fp_val
 
     Cl = (
@@ -289,8 +298,11 @@ def _compute_ground_forces(
     # parameters
     m, ground_wn, ground_zeta, ground_c_xy, ground_mu,
     ground_max_force_per_wheel, max_defl_rud, tailwheel_steer_gain,
-) -> tuple[ca.SX, ca.SX]:
+) -> tuple[cy.SXType, cy.SXType]:
     """Compute ground reaction forces and moments."""
+    # Import casadi for SX type - needed for zeros initialization
+    import casadi as ca
+
     left_wheel_b = ca.SX([0.1, 0.1, -0.1])
     right_wheel_b = ca.SX([0.1, -0.1, -0.1])
     tail_wheel_b = ca.SX([-0.4, 0.0, 0.0])
@@ -309,41 +321,41 @@ def _compute_ground_forces(
     for i, wheel_b in enumerate(wheel_b_list):
         wheel_e = R_eb @ wheel_b
         pos_wheel_e = p_sym + wheel_e
-        vel_wheel_b = v_b + ca.cross(w_sym, wheel_b)
+        vel_wheel_b = v_b + cy.cross(w_sym, wheel_b)
         vel_wheel_e = R_eb @ vel_wheel_b
         penetration = -pos_wheel_e[2]
 
         normal_force_unclamped = penetration * ground_k - vel_wheel_e[2] * ground_c_vert
         normal_force = clamp(normal_force_unclamped, 0, ground_max_force_per_wheel)
 
-        lateral_damp = ca.vertcat(-vel_wheel_e[0] * ground_c_xy, -vel_wheel_e[1] * ground_c_xy)
-        lateral_mag = ca.norm_2(lateral_damp) + 1e-9
+        lateral_damp = cy.vertcat(-vel_wheel_e[0] * ground_c_xy, -vel_wheel_e[1] * ground_c_xy)
+        lateral_mag = cy.norm_2(lateral_damp) + 1e-9
         max_lateral = ground_mu * normal_force
-        scale_lat = ca.if_else(lateral_mag > max_lateral, max_lateral / lateral_mag, 1.0)
+        scale_lat = cy.if_else(lateral_mag > max_lateral, max_lateral / lateral_mag, 1.0)
         lateral_limited = scale_lat * lateral_damp
 
-        force_contact_e = ca.vertcat(lateral_limited[0], lateral_limited[1], normal_force)
-        force_e = ca.if_else(pos_wheel_e[2] < 0.0, force_contact_e, ca.vertcat(0, 0, 0))
+        force_contact_e = cy.vertcat(lateral_limited[0], lateral_limited[1], normal_force)
+        force_e = cy.if_else(pos_wheel_e[2] < 0.0, force_contact_e, cy.vertcat(0, 0, 0))
         ground_force_e_list.append(force_e)
 
         force_b = R_be @ force_e
-        MG_b += ca.cross(wheel_b, force_b)
+        MG_b += cy.cross(wheel_b, force_b)
 
         # Tail wheel steering
         if i == 2:
             rud_rad = max_defl_rud * clamp(rud_sym, -1, 1)
             forward_speed = vel_wheel_e[0]
             speed_sq = forward_speed * forward_speed
-            lateral_force_factor = ca.sqrt(speed_sq + 1.0) - 1.0
+            lateral_force_factor = cy.sqrt(speed_sq + 1.0) - 1.0
             tailwheel_moment_z = tailwheel_steer_gain * rud_rad * lateral_force_factor
-            tailwheel_moment_b = ca.if_else(
+            tailwheel_moment_b = cy.if_else(
                 pos_wheel_e[2] < 0.0,
-                ca.vertcat(0, 0, tailwheel_moment_z),
-                ca.vertcat(0, 0, 0),
+                cy.vertcat(0, 0, tailwheel_moment_z),
+                cy.vertcat(0, 0, 0),
             )
             MG_b += tailwheel_moment_b
 
-    FG_b = R_be @ ca.sum2(ca.horzcat(*ground_force_e_list))
+    FG_b = R_be @ cy.sum2(cy.horzcat(*ground_force_e_list))
 
     return FG_b, MG_b
 
@@ -360,12 +372,17 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
 
     Frames: e=earth (ENU inertial), b=body (FLU), wind=aligned with velocity
 
-    Args:
-        attitude_rep: 'quat' (default) for quaternions (ROS2 compatible, no singularities)
-                     'euler' for Euler angles (better for linearization analysis)
+    Parameters
+    ----------
+    attitude_rep : str
+        'quat' (default) for quaternions (ROS2 compatible, no singularities)
+        'euler' for Euler angles (better for linearization analysis)
 
-    Returns:
+    Returns
+    -------
+    Model
         Model instance with selected attitude representation
+
     """
     # Select state class based on attitude representation
     if attitude_rep == 'quat':
@@ -374,14 +391,17 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
         model_type = SportCubEuler
     else:
         raise ValueError(f'Invalid attitude representation: {attitude_rep}')
-    
+
     model = Model(model_type)
-    
+
     # Shortcuts for typed views
     x = model.x  # states
     u = model.u  # inputs
     p = model.p  # parameters
     y = model.y  # outputs
+
+    # Import casadi for SX type - needed for matrix initialization
+    import casadi as ca
 
     # Build inertia tensor
     J = ca.SX.zeros(3, 3)
@@ -391,8 +411,8 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
     J[0, 2] = p.Jxz.sym
     J[2, 0] = p.Jxz.sym
 
-    xAxis = ca.vertcat(1, 0, 0)
-    zAxis = ca.vertcat(0, 0, 1)
+    xAxis = cy.vertcat(1, 0, 0)
+    zAxis = cy.vertcat(0, 0, 1)
 
     # Get rotation matrix and attitude element based on representation
     if attitude_rep == 'quat':
@@ -427,12 +447,12 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
     qbar = 0.5 * p.rho.sym * Vt**2
 
     # Aerodynamic forces
-    FA_wind_frd = qbar * p.S.sym * ca.vertcat(-coeff['CD'], coeff['CY'], -coeff['CL'])
+    FA_wind_frd = qbar * p.S.sym * cy.vertcat(-coeff['CD'], coeff['CY'], -coeff['CL'])
     FA_body_frd = R_b_wind @ FA_wind_frd
     FA_b = frd_to_flu(FA_body_frd)
 
     # Aerodynamic moments
-    MA_frd = qbar * p.S.sym * ca.vertcat(
+    MA_frd = qbar * p.S.sym * cy.vertcat(
         p.span.sym * coeff['Cl'],
         p.cbar.sym * coeff['Cm'],
         p.span.sym * coeff['Cn'],
@@ -494,7 +514,7 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
     att_dot = att.right_jacobian() @ x.w.sym
 
     # Angular velocity derivative
-    w_dot = ca.inv(J) @ (M_b - ca.cross(x.w.sym, J @ x.w.sym))
+    w_dot = cy.inv(J) @ (M_b - cy.cross(x.w.sym, J @ x.w.sym))
 
     # Define ODEs
     model.ode(x.p, p_dot)
@@ -508,9 +528,6 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
 
 __all__ = [
     'sportcub',
-    'StatesQuat',
-    'StatesEuler',
-    'Inputs',
-    'Parameters',
-    'Outputs',
+    'SportCubQuat',
+    'SportCubEuler',
 ]

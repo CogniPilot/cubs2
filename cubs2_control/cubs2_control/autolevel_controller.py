@@ -13,19 +13,20 @@
 # limitations under the License.
 """Autolevel controller for aircraft - SAFE/AS3X style stabilized autopilot."""
 from beartype import beartype
-import casadi as ca
+from cyecca.dynamics.explicit import explicit
 from cyecca.dynamics.explicit import input_var
 from cyecca.dynamics.explicit import Model
 from cyecca.dynamics.explicit import output_var
 from cyecca.dynamics.explicit import param
 from cyecca.dynamics.explicit import state
-from cyecca.dynamics.explicit import explicit
+import cyecca.sym as cy
 import numpy as np
 
 
 @explicit
 class AutolevelController:
     """Unified autolevel controller with all states, inputs, params, outputs."""
+
     # === States ===
     i_p: float = state(1, 0.0, 'roll rate integral')
     i_q: float = state(1, 0.0, 'pitch rate integral')
@@ -43,42 +44,42 @@ class AutolevelController:
 
     # === Parameters ===
     # Outer loop: angle control (slow, 1-3 Hz)
-    Kp_phi: float = param(2.5, 'P gain roll angle (per rad)')
-    Kp_theta: float = param(2.0, 'P gain pitch angle (per rad)')
+    Kp_phi: float = param(2.5, desc='P gain roll angle (per rad)')
+    Kp_theta: float = param(2.0, desc='P gain pitch angle (per rad)')
 
     # Inner loop: rate damping (fast, 15-25 rad/s)
-    Kp_p: float = param(0.6, 'P gain roll rate (per rad/s)')
-    Ki_p: float = param(0.0, 'I gain roll rate')
-    Kp_q: float = param(0.6, 'P gain pitch rate (per rad/s)')
-    Ki_q: float = param(0.0, 'I gain pitch rate')
+    Kp_p: float = param(0.6, desc='P gain roll rate (per rad/s)')
+    Ki_p: float = param(0.0, desc='I gain roll rate')
+    Kp_q: float = param(0.6, desc='P gain pitch rate (per rad/s)')
+    Ki_q: float = param(0.0, desc='I gain pitch rate')
 
     # Yaw damping (passive)
-    Kp_r: float = param(0.3, 'P gain yaw rate damping')
+    Kp_r: float = param(0.3, desc='P gain yaw rate damping')
 
     # Speed control
-    Kp_speed: float = param(0.7, 'P gain speed')
-    speed_ref: float = param(20.0, 'reference speed (m/s)')
+    Kp_speed: float = param(0.7, desc='P gain speed')
+    speed_ref: float = param(20.0, desc='reference speed (m/s)')
 
     # Trim offsets
-    trim_aileron: float = param(0.0, 'aileron trim offset (rad)')
-    trim_elevator: float = param(0.0, 'elevator trim offset (rad)')
-    trim_rudder: float = param(0.0, 'rudder trim offset (rad)')
+    trim_aileron: float = param(0.0, desc='aileron trim offset (rad)')
+    trim_elevator: float = param(0.0, desc='elevator trim offset (rad)')
+    trim_rudder: float = param(0.0, desc='rudder trim offset (rad)')
 
     # Stick to attitude mapping
-    stick_to_phi: float = param(np.deg2rad(45), 'aileron stick to roll ref (rad)')
-    stick_to_theta: float = param(np.deg2rad(20), 'elevator stick to pitch ref (rad)')
+    stick_to_phi: float = param(np.deg2rad(45), desc='aileron stick to roll ref (rad)')
+    stick_to_theta: float = param(np.deg2rad(20), desc='elevator stick to pitch ref (rad)')
 
     # Limits
-    phi_max: float = param(np.deg2rad(50), 'max bank angle (rad)')
-    theta_max: float = param(np.deg2rad(30), 'max pitch angle (rad)')
-    ail_min: float = param(-0.5, 'ail min (rad)')
-    ail_max: float = param(0.5, 'ail max (rad)')
-    elev_min: float = param(-0.5, 'elev min (rad)')
-    elev_max: float = param(0.5, 'elev max (rad)')
-    rud_min: float = param(-0.5, 'rud min (rad)')
-    rud_max: float = param(0.5, 'rud max (rad)')
-    thr_min: float = param(0.0, 'thr min')
-    thr_max: float = param(1.0, 'thr max')
+    phi_max: float = param(np.deg2rad(50), desc='max bank angle (rad)')
+    theta_max: float = param(np.deg2rad(30), desc='max pitch angle (rad)')
+    ail_min: float = param(-0.5, desc='ail min (rad)')
+    ail_max: float = param(0.5, desc='ail max (rad)')
+    elev_min: float = param(-0.5, desc='elev min (rad)')
+    elev_max: float = param(0.5, desc='elev max (rad)')
+    rud_min: float = param(-0.5, desc='rud min (rad)')
+    rud_max: float = param(0.5, desc='rud max (rad)')
+    thr_min: float = param(0.0, desc='thr min')
+    thr_max: float = param(1.0, desc='thr max')
 
     # === Outputs ===
     ail: float = output_var(desc='aileron (rad)')
@@ -89,7 +90,7 @@ class AutolevelController:
 
 def _saturate(val, low, high):
     """Saturate value between low and high."""
-    return ca.fmin(ca.fmax(val, low), high)
+    return cy.fmin(cy.fmax(val, low), high)
 
 
 @beartype
@@ -101,8 +102,11 @@ def autolevel_controller() -> Model:
     - Inner loop: rate damping (fast, gyro-based)
     - Outer loop: attitude hold (slow, uses quaternion-derived φ/θ)
 
-    Returns:
-        Model: Autolevel controller model with integral states and control outputs
+    Returns
+    -------
+    Model
+        Autolevel controller model with integral states and control outputs
+
     """
     model = Model(AutolevelController)
     m = model.v  # Unified namespace
@@ -114,10 +118,10 @@ def autolevel_controller() -> Model:
     qz = m.q.sym[3]
 
     # Roll (phi) - aerospace ZYX sequence
-    phi = ca.atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
+    phi = cy.atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
 
     # Pitch (theta)
-    theta = ca.asin(2.0 * (qw * qy - qz * qx))
+    theta = cy.asin(2.0 * (qw * qy - qz * qx))
 
     # Extract angular rates
     p_meas = m.omega.sym[0]
@@ -125,7 +129,7 @@ def autolevel_controller() -> Model:
     r_meas = m.omega.sym[2]
 
     # Airspeed from velocity
-    speed_meas = ca.norm_2(m.vel.sym)
+    speed_meas = cy.norm_2(m.vel.sym)
 
     # In stabilized mode, map stick inputs to attitude references
     phi_ref_from_stick = m.ail_manual.sym * m.stick_to_phi.sym
@@ -165,9 +169,15 @@ def autolevel_controller() -> Model:
 
     # Mode switch: 0 = manual (pass-through), 1 = stabilized (autopilot)
     # Apply trim offsets to all outputs
-    ail_out = (m.ail_manual.sym * (1.0 - m.mode.sym) + ail_stabilized * m.mode.sym) + m.trim_aileron.sym
-    elev_out = (m.elev_manual.sym * (1.0 - m.mode.sym) + elev_stabilized * m.mode.sym) + m.trim_elevator.sym
-    rud_out = (m.rud_manual.sym * (1.0 - m.mode.sym) + rud_stabilized * m.mode.sym) + m.trim_rudder.sym
+    ail_out = (
+        m.ail_manual.sym * (1.0 - m.mode.sym) + ail_stabilized * m.mode.sym
+    ) + m.trim_aileron.sym
+    elev_out = (
+        m.elev_manual.sym * (1.0 - m.mode.sym) + elev_stabilized * m.mode.sym
+    ) + m.trim_elevator.sym
+    rud_out = (
+        m.rud_manual.sym * (1.0 - m.mode.sym) + rud_stabilized * m.mode.sym
+    ) + m.trim_rudder.sym
     thr_out = m.thr_manual.sym * (1.0 - m.mode.sym) + thr_stabilized * m.mode.sym
 
     # Define outputs

@@ -60,7 +60,6 @@ class TestSportCubNode:
 
         min_z = float(np.min(z_series))
         max_z = float(np.max(z_series))
-        max_xy_drift = float(np.max(xy_series))
 
         half_idx = len(v_mags) // 2
         settled_mask = (v_mags[half_idx:] < 0.05) & (xy_series[half_idx:] < 0.02)
@@ -118,7 +117,11 @@ class TestSportCubNode:
                 if first_contact and not rebound_found:
                     if min_z_after_contact is None or z < min_z_after_contact:
                         min_z_after_contact = z
-                    if prev_vz > 0.001 and vz <= 0 and (z - min_z_after_contact) >= bounce_threshold:
+                    bounce_check = (
+                        prev_vz > 0.001 and vz <= 0
+                        and (z - min_z_after_contact) >= bounce_threshold
+                    )
+                    if bounce_check:
                         rebound_found = True
                         rebound_height = z
                 prev_vz = vz
@@ -177,8 +180,8 @@ class TestSportCubNode:
         u_trim = model.u(v_trim)
         p_vec = model.p(v_trim)
 
-        # Verify trim quality
-        x_dot = model._f(x_trim, u_trim, p_vec, 0.0)
+        # Verify trim quality using f_x (Modelica DAE standard naming)
+        x_dot = model.f_x(x_trim, u_trim, p_vec, 0.0)
         x_dot = np.array(x_dot).flatten()
         v_dot = x_dot[3:6]
         w_dot = x_dot[9:12]
@@ -225,7 +228,6 @@ class TestSportCubNode:
         horizontal_distances = np.array([np.linalg.norm(p[:2] - x0_horizontal) for p in traj.p])
         airspeeds = np.linalg.norm(traj.v, axis=1)
 
-        final_time = float(t[-1])
         altitude_lost = float(altitudes[0] - altitudes[-1])
         horizontal_dist = float(horizontal_distances[-1])
         glide_ratio = horizontal_dist / altitude_lost if altitude_lost > 0 else 0.0
@@ -235,7 +237,10 @@ class TestSportCubNode:
         roll_angles = []
         pitch_angles = []
         for q in traj.r:
-            phi = float(np.arctan2(2 * (q[0] * q[1] + q[2] * q[3]), 1 - 2 * (q[1] ** 2 + q[2] ** 2)))
+            phi = float(np.arctan2(
+                2 * (q[0] * q[1] + q[2] * q[3]),
+                1 - 2 * (q[1] ** 2 + q[2] ** 2)
+            ))
             theta = float(np.arcsin(np.clip(2 * (q[0] * q[2] - q[3] * q[1]), -1, 1)))
             roll_angles.append(np.degrees(phi))
             pitch_angles.append(np.degrees(theta))
@@ -306,7 +311,8 @@ class TestSportCubNode:
         u_trim = model.u(v_trim)
         p_vec = model.p(v_trim)
 
-        outputs = model._g(x_trim, u_trim, p_vec, 0.0)
+        # Compute outputs using f_y (Modelica DAE standard naming)
+        outputs = model.f_y(x_trim, u_trim, p_vec, 0.0)
         outputs = np.array(outputs).flatten()
 
         out_offset = 0
@@ -367,14 +373,18 @@ class TestSportCubNode:
         assert hasattr(v_trim, 'r'), 'State should have "r" field for rotation'
         assert len(v_trim.r) == 3, f'Euler angles should be 3D, got {len(v_trim.r)}'
 
-        psi, theta, phi = v_trim.r[0], v_trim.r[1], v_trim.r[2]
+        _, theta, phi = v_trim.r[0], v_trim.r[1], v_trim.r[2]
         assert abs(phi) < np.deg2rad(5.0), f'Roll angle too large: {np.degrees(phi):.2f}°'
-        assert abs(theta) < np.deg2rad(15.0), f'Pitch angle too large: {np.degrees(theta):.2f}°'
+        assert (
+            abs(theta) < np.deg2rad(15.0)
+        ), f'Pitch angle too large: {np.degrees(theta):.2f}°'
 
         A, B, C, D = linearize_dynamics(model_euler, v_trim)
 
         expected_state_size = 3 + 3 + 3 + 3
-        assert A.shape == (expected_state_size, expected_state_size), f'A matrix size mismatch: {A.shape}'
+        assert A.shape == (expected_state_size, expected_state_size), (
+            f'A matrix size mismatch: {A.shape}'
+        )
         assert B.shape[0] == expected_state_size, f'B matrix rows mismatch: {B.shape}'
 
         modes = analyze_modes(A, names=model_euler.state_names)
@@ -385,7 +395,8 @@ class TestSportCubNode:
         u_trim = model_euler.u(v_trim)
         p_vec = model_euler.p(v_trim)
 
-        outputs = model_euler._g(x_trim, u_trim, p_vec, 0.0)
+        # Compute outputs using f_y (Modelica DAE standard naming)
+        outputs = model_euler.f_y(x_trim, u_trim, p_vec, 0.0)
         outputs = np.array(outputs).flatten()
 
         out_offset = 0

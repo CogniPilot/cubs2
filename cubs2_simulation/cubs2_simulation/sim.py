@@ -16,7 +16,6 @@
 from beartype import beartype
 from builtin_interfaces.msg import Time
 import casadi as ca
-from cubs2_control.closed_loop import closed_loop_sportcub
 from cubs2_dynamics.sportcub import sportcub
 from cubs2_msgs.msg import AircraftControl
 from cubs2_simulation.markers import create_force_arrow
@@ -51,9 +50,6 @@ class SimNode(Node):
         # Toggle force/moment visualization
         self.declare_parameter('show_forces', True)
         self.show_forces = bool(self.get_parameter('show_forces').value)
-
-        # Model selection parameter
-        self.declare_parameter('model', 'direct')  # 'direct' or 'closed_loop'
 
         # Trim parameters from config file
         self.declare_parameter('controller.trim.aileron', 0.0)
@@ -97,18 +93,9 @@ class SimNode(Node):
         )
         self.paused_publisher = self.create_publisher(Bool, '/sat/paused', 10)
 
-        # Initialize model based on parameter
-        self.model_type = str(self.get_parameter('model').value)
-
-        if self.model_type == 'closed_loop':
-            self.get_logger().info(
-                'Initializing closed-loop model '
-                '(aircraft + autolevel controller)'
-            )
-            self.model = closed_loop_sportcub()
-        else:
-            self.get_logger().info('Initializing direct sportcub model (no controller)')
-            self.model = sportcub()
+        # Initialize model
+        self.get_logger().info('Initializing sportcub model')
+        self.model = sportcub()
 
         self.y = self.model.y_current  # computed at end of each step
 
@@ -145,7 +132,6 @@ class SimNode(Node):
                 tf=self.sim_time,
                 dt=self.dt,
                 u_func=self._get_control_inputs,
-                in_place=True,
             )
 
         except RuntimeError as e:
@@ -155,10 +141,7 @@ class SimNode(Node):
             return
 
         # Update propeller angle for animation
-        if self.model_type == 'closed_loop':
-            thr_value = self.model.u0.thr_manual
-        else:
-            thr_value = self.model.u0.thr
+        thr_value = self.model.v0.thr
         propeller_rpm = thr_value * 2000.0  # Max 2000 RPM at full throttle
         propeller_omega = propeller_rpm * 2.0 * np.pi / 60.0  # Convert to rad/s
         self.propeller_angle += propeller_omega * self.dt
@@ -168,42 +151,25 @@ class SimNode(Node):
 
     def _get_control_inputs(self, t, model):
         """
-        Get control inputs based on model type.
+        Get control inputs for the model.
 
-        For closed-loop: 5 inputs (ail_manual, elev_manual, rud_manual,
-                                   thr_manual, mode)
-        For direct: 4 inputs (ail, elev, rud, thr)
+        Returns 4 inputs: ail, elev, rud, thr
         """
-        if self.model_type == 'closed_loop':
-            return ca.vertcat(
-                model.u0.ail_manual,
-                model.u0.elev_manual,
-                model.u0.rud_manual,
-                model.u0.thr_manual,
-                model.u0.mode
-            )
-        else:
-            return ca.vertcat(
-                model.u0.ail,
-                model.u0.elev,
-                model.u0.rud,
-                model.u0.thr
-            )
+        return ca.vertcat(
+            model.v0.ail,
+            model.v0.elev,
+            model.v0.rud,
+            model.v0.thr
+        )
 
     @beartype
     def control_callback(self, msg: AircraftControl) -> None:
         """Handle AircraftControl messages."""
-        # Update actual model inputs based on model type
-        if self.model_type == 'closed_loop':
-            self.model.u0.ail_manual = float(msg.aileron)
-            self.model.u0.elev_manual = float(msg.elevator)
-            self.model.u0.thr_manual = float(msg.throttle)
-            # self.model.u0.rud_manual = float(msg.rudder)
-        else:
-            self.model.u0.ail = float(msg.aileron)
-            self.model.u0.elev = float(msg.elevator)
-            self.model.u0.thr = float(msg.throttle)
-            # self.model.u0.rud = float(msg.rudder)
+        # Update model inputs
+        self.model.v0.ail = float(msg.aileron)
+        self.model.v0.elev = float(msg.elevator)
+        self.model.v0.thr = float(msg.throttle)
+        self.model.v0.rud = float(msg.rudder)
 
     @beartype
     def pause_topic_callback(self, msg: Empty) -> None:
@@ -276,38 +242,31 @@ class SimNode(Node):
         qz = np.sin(half_yaw)
 
         # Apply to aircraft state
-        self.model.x0.p[0] = initial_x
-        self.model.x0.p[1] = initial_y
-        self.model.x0.p[2] = initial_z
+        self.model.v0.p[0] = initial_x
+        self.model.v0.p[1] = initial_y
+        self.model.v0.p[2] = initial_z
 
         # Reset velocity to zero
-        self.model.x0.v[0] = 0.0
-        self.model.x0.v[1] = 0.0
-        self.model.x0.v[2] = 0.0
+        self.model.v0.v[0] = 0.0
+        self.model.v0.v[1] = 0.0
+        self.model.v0.v[2] = 0.0
 
         # Set attitude quaternion
-        self.model.x0.r[0] = qw
-        self.model.x0.r[1] = qx
-        self.model.x0.r[2] = qy
-        self.model.x0.r[3] = qz
+        self.model.v0.r[0] = qw
+        self.model.v0.r[1] = qx
+        self.model.v0.r[2] = qy
+        self.model.v0.r[3] = qz
 
         # Reset angular velocity to zero
-        self.model.x0.w[0] = 0.0
-        self.model.x0.w[1] = 0.0
-        self.model.x0.w[2] = 0.0
+        self.model.v0.w[0] = 0.0
+        self.model.v0.w[1] = 0.0
+        self.model.v0.w[2] = 0.0
 
-        # Manual control inputs from joystick/gamepad
-        if self.model_type == 'closed_loop':
-            self.model.u0.ail_manual = 0.0
-            self.model.u0.elev_manual = 0.0
-            self.model.u0.rud_manual = 0.0
-            self.model.u0.thr_manual = 0.0
-            self.model.u0.mode = float(AircraftControl.MODE_MANUAL)
-        else:
-            self.model.u0.ail = 0.0
-            self.model.u0.elev = 0.0
-            self.model.u0.rud = 0.0
-            self.model.u0.thr = 0.0
+        # Control inputs
+        self.model.v0.ail = 0.0
+        self.model.v0.elev = 0.0
+        self.model.v0.rud = 0.0
+        self.model.v0.thr = 0.0
 
     @beartype
     def get_sim_time_msg(self) -> Clock:
@@ -341,10 +300,10 @@ class SimNode(Node):
             self.publish_force_moment_markers()
 
         # Extract state as numpy arrays for publishing
-        pos = np.array(self.model.x0.p).flatten()
-        q = np.array(self.model.x0.r).flatten()
-        vel = np.array(self.model.x0.v).flatten()
-        w = np.array(self.model.x0.w).flatten()
+        pos = np.array(self.model.v0.p).flatten()
+        q = np.array(self.model.v0.r).flatten()
+        vel = np.array(self.model.v0.v).flatten()
+        w = np.array(self.model.v0.w).flatten()
 
         # Publish pose using tf (position + orientation)
         t = TransformStamped()

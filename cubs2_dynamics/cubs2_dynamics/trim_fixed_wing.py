@@ -16,8 +16,7 @@ from beartype import beartype
 import casadi as ca
 from cyecca.dynamics.explicit import Model
 from cyecca.dynamics.explicit.linearize import (
-    find_trim, linearize_dynamics, analyze_modes,
-    get_state_index, get_input_index
+    find_trim, get_input_index, get_state_index
 )
 import numpy as np
 
@@ -81,7 +80,7 @@ def find_trim_fixed_wing(
     # Create initial guesses with better aerodynamic setup
     model_type = model.model_type
     v_guess = model_type.numeric()
-    
+
     # Copy defaults from model.v0
     for field_name in model_type._field_info.keys():
         val = getattr(model.v0, field_name)
@@ -92,7 +91,7 @@ def find_trim_fixed_wing(
 
     # Set position
     v_guess.p = np.array([0.0, 0.0, 10.0])
-    
+
     # Initial velocity guess: assume small pitch angle, velocity mostly forward
     pitch_guess = np.deg2rad(5.0)
 
@@ -128,7 +127,7 @@ def find_trim_fixed_wing(
     w_start, w_end = get_state_index(model, 'w')  # angular velocity
     p_start, p_end = get_state_index(model, 'p')  # position
     r_start, r_end = get_state_index(model, 'r')  # rotation
-    
+
     ail_start, ail_end = get_input_index(model, 'ail')
     elev_start, elev_end = get_input_index(model, 'elev')
     rud_start, rud_end = get_input_index(model, 'rud')
@@ -153,6 +152,7 @@ def find_trim_fixed_wing(
         -------
         cost : ca.MX
             Cost to minimize.
+
         """
         # Extract velocity and angular velocity derivatives
         xdot_v = xdot_opt[v_start:v_end]
@@ -180,12 +180,12 @@ def find_trim_fixed_wing(
         # Coordinated flight: minimize sideslip and angular rates
         obj += 10.0 * v_vel[1] ** 2  # lateral velocity (sideslip)
         obj += 10.0 * ca.sumsqr(w_rate)  # angular rates
-        
+
         # Get input values
         u_ail = u_opt[ail_start]
         u_rud = u_opt[rud_start]
         u_thr = u_opt[thr_start]
-        
+
         obj += 0.1 * (u_ail**2 + u_rud**2)  # minimize aileron and rudder
 
         if not fix_throttle:
@@ -207,6 +207,7 @@ def find_trim_fixed_wing(
             Input optimization variable vector.
         model : Model
             The model instance.
+
         """
         # Check for rotation representation
         r_info = model_type._field_info.get('r', None)
@@ -285,17 +286,17 @@ def print_trim_details(model, v_trim, header=None):
     if header:
         print(f'\n{header}')
         print('=' * 80)
-    
+
     print('Trim State:')
     for field_name in model._state_fields:
         val = getattr(v_trim, field_name)
         print(f'  {field_name}: {val}')
-    
+
     print('Trim Input:')
     for field_name in model._input_fields:
         val = getattr(v_trim, field_name)
         print(f'  {field_name}: {val}')
-    
+
     print('Parameters:')
     for field_name in model._param_fields:
         val = getattr(v_trim, field_name)
@@ -323,23 +324,30 @@ def classify_aircraft_modes(
         real = abs(mode['real'])
         stable = mode['stability'] == 'stable'
 
-        # Short period: pitch-dominated, fast
-        if w_c > 0.5:
+        # Get specific angular rate contributions for mode classification
+        # w[0] = roll rate (p), w[1] = pitch rate (q), w[2] = yaw rate (r)
+        participation = mode.get('participation', {})
+        w0_c = participation.get('w[0]', 0)  # roll rate
+        w1_c = participation.get('w[1]', 0)  # pitch rate
+        w2_c = participation.get('w[2]', 0)  # yaw rate
+
+        # Short period: pitch-dominated (w[1] > roll/yaw), fast
+        if w1_c > 0.3 and w1_c > w0_c:
             if (osc and freq > 0.3) or (not osc and real > 5.0 and stable):
                 return 'short_period'
+
+        # Roll damping: roll rate dominated, fast real mode
+        if not osc and w0_c > 0.5 and real > 5.0 and stable:
+            return 'roll_damping'
 
         # Phugoid: velocity-dominated, slow oscillation
         if v_c > 0.4 and w_c < 0.5:
             if (osc and freq < 1.0) or (not osc and real < 15.0):
                 return 'phugoid'
 
-        # Dutch roll: lateral oscillation (sideslip + yaw)
-        if osc and v_c > 0.2:
+        # Dutch roll: lateral oscillation (sideslip + yaw rate)
+        if osc and (w2_c > 0.2 or (v_c > 0.2 and w0_c > 0.1)):
             return 'dutch_roll'
-
-        # Roll damping: fast roll convergence
-        if not osc and w_c > 0.3 and real > 5.0 and stable:
-            return 'roll_damping'
 
         # Spiral: slow position drift
         if not osc and p_c > 0.5 and real < 1.0:
