@@ -14,20 +14,24 @@
 # limitations under the License.
 from beartype import beartype
 import casadi as ca
-from cyecca.dynamics import ModelSX
+from cyecca.dynamics.explicit import Model
+from cyecca.dynamics.explicit.linearize import (
+    find_trim, linearize_dynamics, analyze_modes,
+    get_state_index, get_input_index
+)
 import numpy as np
 
 
 @beartype
 def find_trim_fixed_wing(
-    model: ModelSX,
+    model: Model,
     V_target: float | None = 3.0,
     gamma: float | None = 0.0,
     print_progress: bool = True,
     fix_throttle: bool = True,
     verbose: bool = False,
     ipopt_print_level: int = 5,
-) -> tuple[np.ndarray, np.ndarray, dict | None]:
+):
     """
     Fixed-wing aircraft trim for steady level or descending flight.
 
@@ -36,7 +40,7 @@ def find_trim_fixed_wing(
 
     Parameters
     ----------
-    model : ModelSX
+    model : Model
         Aircraft model instance
     V_target : float, optional
         Target airspeed (m/s). If None, solver finds natural equilibrium speed.
@@ -52,6 +56,13 @@ def find_trim_fixed_wing(
     ipopt_print_level : int
         IPOPT solver verbosity (0-12)
 
+    Returns
+    -------
+    v_trim : dataclass instance
+        Trim point with all state, input, param, output fields.
+    stats : dict
+        Solver statistics.
+
     Note:
     ----
         When finding glide trim (fix_throttle=True) with V_target=None and gamma=None,
@@ -59,11 +70,6 @@ def find_trim_fixed_wing(
         This is the best glide condition - no explicit L/D optimization is needed.
 
     """
-    import copy
-
-    from cyecca.dynamics.linearize import find_trim as find_trim_generic
-    from cyecca.dynamics.linearize import print_trim_details
-
     # Use defaults if not specified
     if gamma is not None:
         gamma = float(gamma)
@@ -73,170 +79,227 @@ def find_trim_fixed_wing(
         V_target_guess = V_target
 
     # Create initial guesses with better aerodynamic setup
-    s_guess = copy.deepcopy(model.x0)
-    s_guess.p = np.array([0.0, 0.0, 10.0])
+    model_type = model.model_type
+    v_guess = model_type.numeric()
+    
+    # Copy defaults from model.v0
+    for field_name in model_type._field_info.keys():
+        val = getattr(model.v0, field_name)
+        if isinstance(val, np.ndarray):
+            setattr(v_guess, field_name, val.copy())
+        else:
+            setattr(v_guess, field_name, val)
+
+    # Set position
+    v_guess.p = np.array([0.0, 0.0, 10.0])
+    
     # Initial velocity guess: assume small pitch angle, velocity mostly forward
-    # in body frame, then rotate to earth frame for initial guess
     pitch_guess = np.deg2rad(5.0)
 
     # Handle both quaternion and euler representations
-    if hasattr(s_guess, 'q'):
-        s_guess.q = np.array(
-            [np.cos(pitch_guess / 2.0), 0.0, np.sin(pitch_guess / 2.0), 0.0])
+    r_info = model_type._field_info.get('r', None)
+    if r_info is not None:
+        if r_info['dim'] == 4:
+            # Quaternion representation
+            v_guess.r = np.array(
+                [np.cos(pitch_guess / 2.0), 0.0, np.sin(pitch_guess / 2.0), 0.0])
+        elif r_info['dim'] == 3:
+            # Euler representation
+            v_guess.r = np.array([0.0, pitch_guess, 0.0])
 
-    # Velocity in earth frame: mostly east with slight upward component
-    s_guess.v = np.array(
+    # Velocity in body frame
+    v_guess.v = np.array(
         [
             V_target_guess * np.cos(pitch_guess),
             0.0,
             V_target_guess * np.sin(pitch_guess),
         ]
     )
-    s_guess.w = np.array([0.0, 0.0, 0.0])
+    v_guess.w = np.array([0.0, 0.0, 0.0])
 
-    i_guess = copy.deepcopy(model.u0)
-    i_guess.ail = 0.0
-    i_guess.elev = -0.1
-    i_guess.rud = 0.0
-    i_guess.thr = 0.0 if fix_throttle else 0.3
+    # Set input guesses
+    v_guess.ail = 0.0
+    v_guess.elev = -0.1
+    v_guess.rud = 0.0
+    v_guess.thr = 0.0 if fix_throttle else 0.3
 
-    def aircraft_cost_fn(
-        model: ModelSX,
-        x,  # State dataclass instance (symbolic)
-        u,  # Input dataclass instance (symbolic)
-        p,  # Parameter dataclass instance (symbolic)
-        x_dot,  # State derivative dataclass instance (symbolic)
-    ) -> ca.MX | ca.SX:
+    # Get indices for state/input fields
+    v_start, v_end = get_state_index(model, 'v')  # velocity
+    w_start, w_end = get_state_index(model, 'w')  # angular velocity
+    p_start, p_end = get_state_index(model, 'p')  # position
+    r_start, r_end = get_state_index(model, 'r')  # rotation
+    
+    ail_start, ail_end = get_input_index(model, 'ail')
+    elev_start, elev_end = get_input_index(model, 'elev')
+    rud_start, rud_end = get_input_index(model, 'rud')
+    thr_start, thr_end = get_input_index(model, 'thr')
+
+    def aircraft_cost_fn(x_opt, u_opt, xdot_opt, model) -> ca.MX:
         """
         Aircraft-specific cost for level flight trim.
 
-        All state/input variables are already wrapped in dataclass instances!
+        Parameters
+        ----------
+        x_opt : ca.MX
+            State optimization variable vector.
+        u_opt : ca.MX
+            Input optimization variable vector.
+        xdot_opt : ca.MX
+            State derivative vector.
+        model : Model
+            The model instance.
 
+        Returns
+        -------
+        cost : ca.MX
+            Cost to minimize.
         """
-        # Calculate outputs for aerodynamic coefficients
-        y = model.output_type.from_vec(
-            model.f_y(x.as_vec(), u.as_vec(), p.as_vec()))
+        # Extract velocity and angular velocity derivatives
+        xdot_v = xdot_opt[v_start:v_end]
+        xdot_w = xdot_opt[w_start:w_end]
 
         # PRIMARY: Zero accelerations for steady-state trim
-        obj = 10000.0 * ca.sumsqr(x_dot.v) + 10000.0 * ca.sumsqr(x_dot.w)
+        obj = 10000.0 * ca.sumsqr(xdot_v) + 10000.0 * ca.sumsqr(xdot_w)
 
-        # Encourage high L/D when both V_target and gamma are None
-        if V_target is None and gamma is None:
-            # Minimize drag-to-lift ratio (equivalent to maximizing L/D)
-            obj += 5.0 * y.CD / (y.CL + 1e-5)
+        # Get velocity from state
+        v_vel = x_opt[v_start:v_end]
+        w_rate = x_opt[w_start:w_end]
 
         # SECONDARY: Match desired speed (if specified)
         if V_target is not None:
-            speed = ca.norm_2(x.v)
+            speed = ca.norm_2(v_vel)
             obj += 1000.0 * (speed - V_target) ** 2
 
         # TERTIARY: Match desired flight path angle (if specified)
         if gamma is not None:
-            horiz_speed = ca.sqrt(x_dot.p[0] ** 2 + x_dot.p[1] ** 2) + 1e-6
-            gamma_actual = ca.atan2(x_dot.p[2], horiz_speed)
+            xdot_p = xdot_opt[p_start:p_end]
+            horiz_speed = ca.sqrt(xdot_p[0] ** 2 + xdot_p[1] ** 2) + 1e-6
+            gamma_actual = ca.atan2(xdot_p[2], horiz_speed)
             obj += 1000.0 * (gamma_actual - gamma) ** 2
 
         # Coordinated flight: minimize sideslip and angular rates
-        obj += 10.0 * x.v[1] ** 2  # lateral velocity (sideslip)
-        obj += 10.0 * ca.sumsqr(x.w)  # angular rates
-        obj += 0.1 * (u.ail**2 + u.rud**2)  # minimize aileron and rudder
+        obj += 10.0 * v_vel[1] ** 2  # lateral velocity (sideslip)
+        obj += 10.0 * ca.sumsqr(w_rate)  # angular rates
+        
+        # Get input values
+        u_ail = u_opt[ail_start]
+        u_rud = u_opt[rud_start]
+        u_thr = u_opt[thr_start]
+        
+        obj += 0.1 * (u_ail**2 + u_rud**2)  # minimize aileron and rudder
 
         if not fix_throttle:
-            obj += 0.1 * u.thr**2
+            obj += 0.1 * u_thr**2
 
         return obj
 
-    def aircraft_constraints_fn(
-        model: ModelSX,
-        x,  # State dataclass instance (symbolic)
-        u,  # Input dataclass instance (symbolic)
-        p,  # Parameter dataclass instance (symbolic)
-        x_dot,  # State derivative dataclass instance (symbolic)
-    ) -> list:
+    def aircraft_constraints_fn(opti, x_opt, u_opt, model):
         """
         Aircraft-specific constraints for level flight trim.
 
-        All state/input variables are already wrapped in dataclass instances!
-        Returns list of constraint expressions.
-
+        Parameters
+        ----------
+        opti : ca.Opti
+            The optimizer instance.
+        x_opt : ca.MX
+            State optimization variable vector.
+        u_opt : ca.MX
+            Input optimization variable vector.
+        model : Model
+            The model instance.
         """
-        constraints = []
+        # Check for rotation representation
+        r_info = model_type._field_info.get('r', None)
+        if r_info is not None:
+            r_sym = x_opt[r_start:r_end]
+            if r_info['dim'] == 4:
+                # Quaternion representation
+                opti.subject_to(ca.sumsqr(r_sym) == 1.0)
+                opti.subject_to(r_sym[0] >= 0.5)
+            elif r_info['dim'] == 3:
+                # Euler angle representation
+                opti.subject_to(r_sym[0] >= -np.pi)  # psi lower
+                opti.subject_to(r_sym[0] <= np.pi)   # psi upper
+                opti.subject_to(r_sym[1] >= -np.pi / 2)  # theta lower
+                opti.subject_to(r_sym[1] <= np.pi / 2)   # theta upper
+                opti.subject_to(r_sym[2] >= -np.pi)  # phi lower
+                opti.subject_to(r_sym[2] <= np.pi)   # phi upper
 
-        # Quaternion unit norm constraint (check shape for quaternion vs euler)
-        if hasattr(x.r, 'shape') and x.r.shape[0] == 4:
-            # Quaternion representation (r is 4x1)
-            constraints.append(ca.sumsqr(x.r) == 1.0)
-            # keep quaternion in positive hemisphere
-            constraints.append(x.r[0] >= 0.5)
-        elif hasattr(x.r, 'shape') and x.r.shape[0] == 3:
-            # Euler angle representation (r is 3x1)
-            # Bounds: psi, theta, phi
-            constraints.append(x.r[0] >= -np.pi)  # psi lower
-            constraints.append(x.r[0] <= np.pi)  # psi upper
-            constraints.append(x.r[1] >= -np.pi / 2)  # theta lower
-            constraints.append(x.r[1] <= np.pi / 2)  # theta upper
-            constraints.append(x.r[2] >= -np.pi)  # phi lower
-            constraints.append(x.r[2] <= np.pi)  # phi upper
-
-        # Velocity bounds (reasonable range for this aircraft)
+        # Velocity bounds
+        v_sym = x_opt[v_start:v_end]
         for i in range(3):
-            constraints.append(x.v[i] >= -20.0)
-            constraints.append(x.v[i] <= 20.0)
+            opti.subject_to(v_sym[i] >= -20.0)
+            opti.subject_to(v_sym[i] <= 20.0)
 
-        # Angular velocity bounds (prevent unrealistic solutions)
+        # Angular velocity bounds
+        w_sym = x_opt[w_start:w_end]
         for i in range(3):
-            constraints.append(x.w[i] >= -5.0)
-            constraints.append(x.w[i] <= 5.0)
+            opti.subject_to(w_sym[i] >= -5.0)
+            opti.subject_to(w_sym[i] <= 5.0)
 
         # Control surface bounds
-        constraints.append(u.ail >= -1)
-        constraints.append(u.ail <= 1)
-        constraints.append(u.elev >= -1)
-        constraints.append(u.elev <= 1)
-        constraints.append(u.rud >= -1)
-        constraints.append(u.rud <= 1)
+        opti.subject_to(u_opt[ail_start] >= -1)
+        opti.subject_to(u_opt[ail_start] <= 1)
+        opti.subject_to(u_opt[elev_start] >= -1)
+        opti.subject_to(u_opt[elev_start] <= 1)
+        opti.subject_to(u_opt[rud_start] >= -1)
+        opti.subject_to(u_opt[rud_start] <= 1)
 
         # Throttle constraints
         if fix_throttle:
-            constraints.append(u.thr == 0.0)
+            opti.subject_to(u_opt[thr_start] == 0.0)
         else:
-            constraints.append(u.thr >= 0.0)
-            constraints.append(u.thr <= 1.0)
-
-        return constraints
+            opti.subject_to(u_opt[thr_start] >= 0.0)
+            opti.subject_to(u_opt[thr_start] <= 1.0)
 
     # Call the generic trim solver
-    x_trim, u_trim, stats = find_trim_generic(
+    v_trim, stats = find_trim(
         model,
-        x_guess=s_guess,
-        u_guess=i_guess,
+        v_guess=v_guess,
         cost_fn=aircraft_cost_fn,
         constraints_fn=aircraft_constraints_fn,
-        print_progress=print_progress,
-        verbose=False,  # We'll handle our own verbose output
-        ipopt_print_level=ipopt_print_level,
-        max_iter=2000,
+        verbose=verbose,
+        print_level=ipopt_print_level,
     )
 
-    # Custom output messages and verbose printing
-    if print_progress and stats is not None:
-        print(f'  ✓ Aircraft trim converged for V={V_target} m/s')
-        if verbose:
-            print('    Ipopt stats:')
-            for k, v in stats.items():
-                if isinstance(v, (float, int, str)):
-                    print(f'      {k}: {v}')
-    elif print_progress:
-        print(f'  ⚠ Aircraft trim had issues for V={V_target} m/s')
+    # Custom output messages
+    if print_progress:
+        if stats['success']:
+            print(f'  ✓ Aircraft trim converged for V={V_target} m/s')
+            if verbose:
+                print('    Ipopt stats:')
+                for k, val in stats.items():
+                    if isinstance(val, (float, int, str)):
+                        print(f'      {k}: {val}')
+        else:
+            print(f'  ⚠ Aircraft trim had issues for V={V_target} m/s')
 
-    header = None
     if verbose:
-        header = (
-            'AIRCRAFT TRIM SOLUTION (VERBOSE)' if stats else 'AIRCRAFT TRIM (FAILED / BEST GUESS)'
-        )
-    print_trim_details(model, x_trim, u_trim, model.p0.as_vec(), header=header)
+        print_trim_details(model, v_trim)
 
-    return x_trim, u_trim, stats
+    return v_trim, stats
+
+
+def print_trim_details(model, v_trim, header=None):
+    """Print detailed trim solution."""
+    if header:
+        print(f'\n{header}')
+        print('=' * 80)
+    
+    print('Trim State:')
+    for field_name in model._state_fields:
+        val = getattr(v_trim, field_name)
+        print(f'  {field_name}: {val}')
+    
+    print('Trim Input:')
+    for field_name in model._input_fields:
+        val = getattr(v_trim, field_name)
+        print(f'  {field_name}: {val}')
+    
+    print('Parameters:')
+    for field_name in model._param_fields:
+        val = getattr(v_trim, field_name)
+        print(f'  {field_name}: {val}')
 
 
 @beartype
@@ -247,43 +310,35 @@ def classify_aircraft_modes(
         return sum(
             mag for name,
             mag in mode.get(
-                'dominant_states',
-                []) if pattern in name)
+                'participation',
+                {}).items() if pattern in name)
 
     def try_classify(mode: dict) -> str | None:
         """Return mode type key if mode matches, else None."""
-        v_c = contrib(mode, 'v[')
-        w_c = contrib(mode, 'w[')
-        p_c = contrib(mode, 'p[')
-        osc = mode['is_oscillatory']
-        freq = mode.get('frequency_hz', 0)
+        v_c = contrib(mode, 'v')
+        w_c = contrib(mode, 'w')
+        p_c = contrib(mode, 'p')
+        osc = mode['type'] == 'complex'
+        freq = mode.get('omega_n', 0) / (2 * np.pi)
         real = abs(mode['real'])
-        stable = mode['stable']
+        stable = mode['stability'] == 'stable'
 
         # Short period: pitch-dominated, fast
-        if contrib(mode, 'w[1]') > 0.5 and w_c > 0.5:
+        if w_c > 0.5:
             if (osc and freq > 0.3) or (not osc and real > 5.0 and stable):
                 return 'short_period'
 
         # Phugoid: velocity-dominated, slow oscillation
-        if (contrib(mode, 'v[0]') > 0.3 or contrib(
-                mode, 'v[2]') > 0.3) and v_c > 0.4:
-            if contrib(mode, 'w[0]') < 0.2 and contrib(mode, 'w[2]') < 0.5:
-                if (osc and freq < 1.0) or (not osc and real < 15.0):
-                    return 'phugoid'
+        if v_c > 0.4 and w_c < 0.5:
+            if (osc and freq < 1.0) or (not osc and real < 15.0):
+                return 'phugoid'
 
         # Dutch roll: lateral oscillation (sideslip + yaw)
-        if osc and (
-            contrib(
-                mode,
-                'v[1]') > 0.2 or contrib(
-                mode,
-                'w[2]') > 0.3):
-            if contrib(mode, 'v[1]') + contrib(mode, 'w[2]') > 0.5:
-                return 'dutch_roll'
+        if osc and v_c > 0.2:
+            return 'dutch_roll'
 
         # Roll damping: fast roll convergence
-        if not osc and contrib(mode, 'w[0]') > 0.3 and real > 5.0 and stable:
+        if not osc and w_c > 0.3 and real > 5.0 and stable:
             return 'roll_damping'
 
         # Spiral: slow position drift
@@ -335,32 +390,32 @@ def print_mode_summary(modes: list[dict], state_names: list[str]) -> None:
         if mode is None:
             print('  NOT IDENTIFIED')
             continue
-        print(f"  Eigenvalue:      {mode['eigenvalue_continuous']:.4f}")
+        print(f"  Eigenvalue:      {mode['eigenvalue']:.4f}")
         print(f"  Time constant:   {mode['time_constant']:.3f} s")
-        print(f"  Damping ratio:   {mode['damping_ratio']:.4f}")
-        if mode['is_oscillatory']:
-            print(f"  Frequency:       {mode['frequency_hz']:.4f} Hz")
+        print(f"  Damping ratio:   {mode['zeta']:.4f}")
+        if mode['type'] == 'complex':
+            print(f"  Frequency:       {mode['omega_n']/(2*np.pi):.4f} Hz")
             print(f"  Period:          {mode['period']:.3f} s")
-        print(f"  Stable:          {mode['stable']}")
-        if 'dominant_states' in mode:
+        print(f"  Stable:          {mode['stability']}")
+        if 'participation' in mode:
             print('  Dominant states:')
-            for name, mag in mode['dominant_states']:
+            sorted_states = sorted(mode['participation'].items(), key=lambda x: -x[1])
+            for name, mag in sorted_states[:5]:
                 print(f'    {name:12s}  {mag:.4f}')
     if classified['other']:
         print(f"\nOther modes ({len(classified['other'])}):")
         print('-' * 80)
         for mode in classified['other']:
-            stable_str = 'stable' if mode['stable'] else 'UNSTABLE'
-            if mode['is_oscillatory']:
-                freq_hz = mode['frequency_hz']
+            stable_str = mode['stability']
+            if mode['type'] == 'complex':
+                freq_hz = mode['omega_n'] / (2 * np.pi)
                 print(
                     f"  λ = {mode['real']:.4f} ± {mode['imag']:.4f}j  "
                     f'({freq_hz:.4f} Hz, {stable_str})'
                 )
             else:
                 tc = mode['time_constant']
-                print(f"  λ = {mode['real']:.4f}  (τ = {
-                      tc:.3f} s, {stable_str})")
+                print(f"  λ = {mode['real']:.4f}  (τ = {tc:.3f} s, {stable_str})")
     print('=' * 80)
 
 
@@ -368,4 +423,5 @@ __all__ = [
     'find_trim_fixed_wing',
     'classify_aircraft_modes',
     'print_mode_summary',
+    'print_trim_details',
 ]

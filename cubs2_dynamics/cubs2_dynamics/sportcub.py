@@ -11,176 +11,141 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""SportCub 6-DOF aircraft dynamics with type-safe symbolic framework."""
-from typing import ClassVar, Literal, Union
+"""SportCub 6-DOF aircraft dynamics with unified namespace model API."""
+from typing import Literal
 
 from beartype import beartype
+
+AttitudeRep = Literal['quat', 'euler']
 import casadi as ca
-from cyecca.dynamics import input_var
-from cyecca.dynamics import ModelSX
-from cyecca.dynamics import output_var
-from cyecca.dynamics import param
-from cyecca.dynamics import state
-from cyecca.dynamics import symbolic
+from cyecca.dynamics.explicit import explicit
+from cyecca.dynamics.explicit import input_var
+from cyecca.dynamics.explicit import Model
+from cyecca.dynamics.explicit import output_var
+from cyecca.dynamics.explicit import param
+from cyecca.dynamics.explicit import state
 import cyecca.lie as lie
 from cyecca.lie.group_so3 import SO3DcmLieGroupElement
 import numpy as np
 
 # ============================================================================
-# State, Input, Parameter, Output Definitions
+# Unified SportCub Model Classes
 # ============================================================================
 
-# SO3 attitude representation type
-AttitudeRep = Literal['quat', 'euler']
+@explicit
+class _Base:
+    # States
+    #==========================================================
+    p: float = state(3, [0, 0, 0], 'position in earth frame ENU (m)')
+    v: float = state(3, [0, 0, 0], 'velocity in earth frame ENU (m/s)')
+    w: float = state(3, [0, 0, 0], 'angular velocity in body frame FLU (rad/s)')
+    # rotation will be defined in subclasses
 
+    # Inputs
+    #==========================================================
+    ail: float = input_var(desc='aileron (normalized -1 to 1)')
+    elev: float = input_var(desc='elevator (normalized -1 to 1)')
+    rud: float = input_var(desc='rudder (normalized -1 to 1)')
+    thr: float = input_var(desc='throttle (normalized 0 to 1)')
 
-@symbolic
-class SportCubStatesQuat:
-    """Quaternion attitude representation."""
-
-    # Class attribute, not part of state vector
-    attitude_rep: ClassVar[AttitudeRep] = 'quat'
-
-    p: ca.SX = state(3, [0, 0, 0], 'position in earth frame ENU (m)')
-    v: ca.SX = state(3, [0, 0, 0], 'velocity in earth frame ENU (m/s)')
-    r: ca.SX = state(
-        4, [1, 0, 0, 0], 'attitude quaternion (w,x,y,z) earth to body')
-    w: ca.SX = state(
-        3, [0, 0, 0], 'angular velocity in body frame FLU (rad/s)')
-
-
-@symbolic
-class SportCubStatesEuler:
-    """
-    Euler angle representation.
-
-    Note: Angular velocity w follows FLU convention (p, q, r).
-    Euler angles r = [psi, theta, phi] follow aeronautical convention:
-    - phi (roll): positive = right wing down
-    - theta (pitch): positive = nose up
-    - psi (yaw): positive = nose right (clockwise viewed from above)
-
-    """
-
-    # Class attribute, not part of state vector
-    attitude_rep: ClassVar[AttitudeRep] = 'euler'
-
-    p: ca.SX = state(3, [0, 0, 0], 'position in earth frame ENU (m)')
-    v: ca.SX = state(3, [0, 0, 0], 'velocity in earth frame ENU (m/s)')
-    r: ca.SX = state(3, [0, 0, 0], 'Euler angles 3-2-1 [psi,theta,phi] rad')
-    w: ca.SX = state(
-        3, [0, 0, 0], 'angular velocity in body frame FLU [p,q,r] (rad/s)')
-
-
-# Union type for functions that work with both representations
-SportCubStates = Union[SportCubStatesQuat, SportCubStatesEuler]
-
-
-@symbolic
-class SportCubInputs:
-    ail: ca.SX = input_var(desc='aileron (normalized -1 to 1)')
-    elev: ca.SX = input_var(desc='elevator (normalized -1 to 1)')
-    rud: ca.SX = input_var(desc='rudder (normalized -1 to 1)')
-    thr: ca.SX = input_var(desc='throttle (normalized 0 to 1)')
-
-
-@symbolic
-class SportCubParams:
     # Physical properties
-    thr_max: ca.SX = param(0.30, 'maximum thrust (N)')
-    m: ca.SX = param(0.065, 'mass (kg)')  # 65g actual weight
-    S: ca.SX = param(0.055, 'wing area (m^2)')  # Moderate wing area
-    rho: ca.SX = param(1.225, 'air density (kg/m^3)')
-    g: ca.SX = param(9.81, 'gravity (m/s^2)')
+    thr_max: float = param(0.30, desc='maximum thrust (N)')
+    m: float = param(0.065, desc='mass (kg)')
+    S: float = param(0.055, desc='wing area (m^2)')
+    rho: float = param(1.225, desc='air density (kg/m^3)')
+    g: float = param(9.81, desc='gravity (m/s^2)')
 
     # Inertias
-    Jx: ca.SX = param(8.0e-4, 'roll inertia (kg·m^2)')
-    Jy: ca.SX = param(9.0e-4, 'pitch inertia (kg·m^2)')
-    Jz: ca.SX = param(1.5e-3, 'yaw inertia (kg·m^2)')
-    Jxz: ca.SX = param(0.0e-4, 'product of inertia (kg·m^2)')
+    Jx: float = param(8.0e-4, desc='roll inertia (kg·m^2)')
+    Jy: float = param(1.2e-3, desc='pitch inertia (kg·m^2)')
+    Jz: float = param(1.8e-3, desc='yaw inertia (kg·m^2)')
+    Jxz: float = param(1.0e-4, desc='product of inertia (kg·m^2)')
 
     # Geometry
-    cbar: ca.SX = param(0.09, 'mean chord (m)')
-    span: ca.SX = param(0.617, 'wingspan (m)')
-    # Wing mounting angle
-    wing_incidence: ca.SX = param(
-        np.deg2rad(6.0), 'wing incidence angle (rad)')
+    cbar: float = param(0.09, desc='mean chord (m)')
+    span: float = param(0.617, desc='wingspan (m)')
+    wing_incidence: float = param(np.deg2rad(6.0), desc='wing incidence angle (rad)')
 
     # Pitch coefficients
-    Cm0: ca.SX = param(0.0, 'pitch moment coeff')
-    Cma: ca.SX = param(-0.8, 'pitch moment slope (1/rad)')
-    Cmq: ca.SX = param(-12.0, 'pitch damping (1/rad)')
+    Cm0: float = param(0.0, desc='pitch moment coeff')
+    Cma: float = param(-0.8, desc='pitch moment slope (1/rad)')
+    Cmq: float = param(-12.0, desc='pitch damping (1/rad)')
 
     # Lift & drag
-    CL0: ca.SX = param(0.5, 'lift coeff at zero AoA')
-    CLa: ca.SX = param(4.7, 'lift slope (1/rad)')
-    CD0: ca.SX = param(0.06, 'parasitic drag')  # Low drag for efficient glider
-    k_ind: ca.SX = param(0.09, 'induced drag factor')
-    CD0_fp: ca.SX = param(0.30, 'flat plate drag')
-    CY_fp: ca.SX = param(0.50, 'flat plate sideforce')
+    CL0: float = param(0.5, desc='lift coeff at zero AoA')
+    CLa: float = param(4.7, desc='lift slope (1/rad)')
+    CD0: float = param(0.06, desc='parasitic drag')
+    k_ind: float = param(0.09, desc='induced drag factor')
+    CD0_fp: float = param(0.30, desc='flat plate drag')
+    CY_fp: float = param(0.50, desc='flat plate sideforce')
 
     # Control effectiveness
-    Clda: ca.SX = param(0.05, 'aileron roll (1/rad)')
-    Cldr: ca.SX = param(0.006, 'rudder roll (1/rad)')
-    Cmde: ca.SX = param(0.3, 'elevator pitch (1/rad)')
-    Cndr: ca.SX = param(0.015, 'rudder yaw (1/rad)')
-    Cnda: ca.SX = param(0.006, 'aileron yaw (1/rad)')
-    CYda: ca.SX = param(0.004, 'aileron sideforce (1/rad)')
-    CYdr: ca.SX = param(-0.015, 'rudder sideforce (1/rad)')
+    Clda: float = param(0.05, desc='aileron roll (1/rad)')
+    Cldr: float = param(0.006, desc='rudder roll (1/rad)')
+    Cmde: float = param(0.3, desc='elevator pitch (1/rad)')
+    Cndr: float = param(0.015, desc='rudder yaw (1/rad)')
+    Cnda: float = param(0.006, desc='aileron yaw (1/rad)')
+    CYda: float = param(0.004, desc='aileron sideforce (1/rad)')
+    CYdr: float = param(-0.015, desc='rudder sideforce (1/rad)')
 
     # Stability & damping
-    Cnb: ca.SX = param(0.06, 'yaw stiffness (1/rad)')
-    CYb: ca.SX = param(-0.50, 'sideslip sideforce (1/rad)')
-    CYr: ca.SX = param(0.20, 'yaw rate sideforce')
-    CYp: ca.SX = param(-0.15, 'roll rate sideforce')
-    Clb: ca.SX = param(-0.25, 'dihedral effect (1/rad)')
-    Clp: ca.SX = param(-0.50, 'roll damping')
-    Clr: ca.SX = param(0.15, 'yaw-roll coupling')
-    Cnr: ca.SX = param(-0.15, 'yaw damping')
-    Cnp: ca.SX = param(0.010, 'roll-yaw coupling')
+    Cnb: float = param(0.06, desc='yaw stiffness (1/rad)')
+    CYb: float = param(-0.50, desc='sideslip sideforce (1/rad)')
+    CYr: float = param(0.20, desc='yaw rate sideforce')
+    CYp: float = param(-0.15, desc='roll rate sideforce')
+    Clb: float = param(-0.25, desc='dihedral effect (1/rad)')
+    Clp: float = param(-0.50, desc='roll damping')
+    Clr: float = param(0.15, desc='yaw-roll coupling')
+    Cnr: float = param(-0.15, desc='yaw damping')
+    Cnp: float = param(0.010, desc='roll-yaw coupling')
 
     # Limits
-    blend_width: ca.SX = param(np.deg2rad(5), 'stall blend width (rad)')
-    max_defl_ail: ca.SX = param(np.deg2rad(30), 'max aileron (rad)')
-    max_defl_elev: ca.SX = param(np.deg2rad(24), 'max elevator (rad)')
-    max_defl_rud: ca.SX = param(np.deg2rad(20), 'max rudder (rad)')
-    alpha_stall: ca.SX = param(np.deg2rad(20), 'stall AoA (rad)')
+    blend_width: float = param(np.deg2rad(5), desc='stall blend width (rad)')
+    max_defl_ail: float = param(np.deg2rad(30), desc='max aileron (rad)')
+    max_defl_elev: float = param(np.deg2rad(24), desc='max elevator (rad)')
+    max_defl_rud: float = param(np.deg2rad(20), desc='max rudder (rad)')
+    alpha_stall: float = param(np.deg2rad(20), desc='stall AoA (rad)')
 
-    disable_aero: ca.SX = param(0.0, 'disable aero (debug)')
-    disable_gf: ca.SX = param(0.0, 'disable ground forces (debug)')
+    disable_aero: float = param(0.0, desc='disable aero (debug)')
+    disable_gf: float = param(0.0, desc='disable ground forces (debug)')
 
     # Ground contact
-    ground_wn: ca.SX = param(350.0, 'ground frequency (rad/s)')
-    ground_zeta: ca.SX = param(0.6, 'ground damping ratio')
-    ground_c_xy: ca.SX = param(0.05, 'lateral damping (N·s/m)')
-    # Reduced from 0.6 (4x reduction)
-    ground_mu: ca.SX = param(0.15, 'friction coefficient')
-    ground_max_force_per_wheel: ca.SX = param(
-        20.0, 'max normal force per wheel (N)')
-    tailwheel_steer_gain: ca.SX = param(
-        0.03, 'tail wheel steering effectiveness (moment/rad)')
+    ground_wn: float = param(350.0, desc='ground frequency (rad/s)')
+    ground_zeta: float = param(0.6, desc='ground damping ratio')
+    ground_c_xy: float = param(0.05, desc='lateral damping (N·s/m)')
+    ground_mu: float = param(0.15, desc='friction coefficient')
+    ground_max_force_per_wheel: float = param(20.0, desc='max normal force per wheel (N)')
+    tailwheel_steer_gain: float = param(0.03, desc='tail wheel steering effectiveness (moment/rad)')
 
+    # Outputs
+    #==========================================================
+    Vt: float = output_var(desc='airspeed (m/s)')
+    alpha: float = output_var(desc='angle of attack (rad)')
+    beta: float = output_var(desc='sideslip (rad)')
+    qbar: float = output_var(desc='dynamic pressure (Pa)')
+    q: float = output_var(4, desc='quaternion (w,x,y,z) for ROS2 compatibility')
+    CL: float = output_var(desc='lift coefficient')
+    CD: float = output_var(desc='drag coefficient')
+    FA_b: float = output_var(3, desc='aero force body (N)')
+    FG_b: float = output_var(3, desc='ground force body (N)')
+    FT_b: float = output_var(3, desc='thrust force body (N)')
+    FW_b: float = output_var(3, desc='weight force body (N)')
+    F_b: float = output_var(3, desc='total force body (N)')
+    MA_b: float = output_var(3, desc='aero moment body (N·m)')
+    MG_b: float = output_var(3, desc='ground moment body (N·m)')
+    MT_b: float = output_var(3, desc='thrust moment body (N·m)')
+    MW_b: float = output_var(3, desc='weight moment body (N·m)')
+    M_b: float = output_var(3, desc='total moment body (N·m)')
 
-@symbolic
-class SportCubOutputs:
-    Vt: ca.SX = output_var(desc='airspeed (m/s)')
-    alpha: ca.SX = output_var(desc='angle of attack (rad)')
-    beta: ca.SX = output_var(desc='sideslip (rad)')
-    qbar: ca.SX = output_var(desc='dynamic pressure (Pa)')
-    q: ca.SX = output_var(
-        4, desc='quaternion (w,x,y,z) for ROS2 compatibility')
-    CL: ca.SX = output_var(desc='lift coefficient')
-    CD: ca.SX = output_var(desc='drag coefficient')
-    FA_b: ca.SX = output_var(3, desc='aero force body (N)')
-    FG_b: ca.SX = output_var(3, desc='ground force body (N)')
-    FT_b: ca.SX = output_var(3, desc='thrust force body (N)')
-    FW_b: ca.SX = output_var(3, desc='weight force body (N)')
-    F_b: ca.SX = output_var(3, desc='total force body (N)')
-    MA_b: ca.SX = output_var(3, desc='aero moment body (N·m)')
-    MG_b: ca.SX = output_var(3, desc='ground moment body (N·m)')
-    MT_b: ca.SX = output_var(3, desc='thrust moment body (N·m)')
-    MW_b: ca.SX = output_var(3, desc='weight moment body (N·m)')
-    M_b: ca.SX = output_var(3, desc='total moment body (N·m)')
+@explicit
+class SportCubQuat(_Base):
+    """Quaternion attitude representation."""
+    r: float = state(4, [1, 0, 0, 0], 'quaternion [w,x,y,z] (ROS2 convention)')
+
+@explicit
+class SportCubEuler(_Base):
+    """Euler angle attitude representation."""
+    r: float = state(3, [0, 0, 0], 'Euler angles [psi,theta,phi] (rad)')
 
 
 # ============================================================================
@@ -197,13 +162,7 @@ def clamp(val: ca.SX, low: ca.SX | int | float,
 @beartype
 def casadi_min_withcargo(
         costs: list[ca.SX], cargos: list[ca.SX]) -> tuple[ca.SX, ca.SX]:
-    """
-    Branch-free CasADi minimum with associated cargo.
-
-    Finds minimum cost and returns the corresponding cargo value using
-    branch-free operations suitable for symbolic computation.
-
-    """
+    """Branch-free CasADi minimum with associated cargo."""
     if len(costs) == 1:
         return costs[0], cargos[0]
 
@@ -220,13 +179,7 @@ def casadi_min_withcargo(
 
 @beartype
 def flu_to_frd(v_flu: ca.SX) -> ca.SX:
-    """
-    Convert ROS FLU (+x forward, +y left, +z up) to classical FRD.
-
-    Converts from ROS FLU (+x forward, +y left, +z up) coordinate system
-    to classical FRD (+x forward, +y right, +z down) coordinate system.
-
-    """
+    """Convert ROS FLU to classical FRD."""
     return ca.vertcat(v_flu[0], -v_flu[1], -v_flu[2])
 
 
@@ -240,43 +193,19 @@ def frd_to_flu(v_frd: ca.SX) -> ca.SX:
 def wind_axes_from_velocity_frd(
     v_frd: ca.SX, eps: float = 1e-6
 ) -> tuple[ca.SX, ca.SX, ca.SX, ca.SX]:
-    """
-    Build wind-frame DCM from velocity vector (FRD convention).
-
-    Constructs a wind-aligned coordinate frame where x-axis points along velocity.
-    Prefers to keep z-axis aligned with body z-axis for normal flight, but switches
-    to x-axis reference when velocity is nearly vertical (to avoid singularity).
-
-    Args
-    ----
-        v_frd: Velocity vector in FRD frame
-        eps: Small value to prevent division by zero
-
-    Returns
-    -------
-        R_b_wind: DCM from body to wind frame (columns are wind axes in body frame)
-        Vt: Total airspeed (with eps added to prevent division by zero)
-        alpha: Angle of attack (rad)
-        beta: Sideslip angle (rad)
-
-    """
+    """Build wind-frame DCM from velocity vector (FRD convention)."""
     U, V, W = v_frd[0], v_frd[1], v_frd[2]
     Vt = ca.norm_2(v_frd) + eps
     w_x = v_frd / Vt
 
-    # Prefer b_z as reference (normal flight), switch to b_x when nearly
-    # vertical
     b_x = ca.SX([1, 0, 0])
     b_z = ca.SX([0, 0, 1])
 
-    # Use b_z unless velocity is nearly aligned with it (vertical flight)
-    cost_z = ca.fabs(ca.dot(w_x, b_z))  # How aligned with vertical
-    cost_x = ca.fabs(ca.dot(w_x, b_x))  # How aligned with forward
+    cost_z = ca.fabs(ca.dot(w_x, b_z))
+    cost_x = ca.fabs(ca.dot(w_x, b_x))
 
-    # Select reference with minimum alignment (most perpendicular)
     _, ref = casadi_min_withcargo([cost_z, cost_x], [b_z, b_x])
 
-    # Build orthonormal frame
     ref_parallel = ca.dot(ref, w_x) * w_x
     w_z_temp = ref - ref_parallel
     w_z = w_z_temp / (ca.norm_2(w_z_temp) + eps)
@@ -284,7 +213,6 @@ def wind_axes_from_velocity_frd(
 
     R_b_wind = ca.horzcat(w_x, w_y, w_z)
 
-    # Compute aerodynamic angles
     V_xz = ca.sqrt(U * U + W * W) + eps
     alpha = ca.atan2(W, U)
     beta = ca.atan2(V, V_xz)
@@ -292,185 +220,77 @@ def wind_axes_from_velocity_frd(
     return R_b_wind, Vt, alpha, beta
 
 
-@beartype
-def aero_coefficients(
-    Vt: ca.SX,
-    alpha: ca.SX,
-    beta: ca.SX,
-    x: Union[SportCubStatesQuat, SportCubStatesEuler],
-    u: SportCubInputs,
-    p: SportCubParams,
+def _compute_aero_coefficients(
+    Vt, alpha, beta,
+    w_sym,  # angular velocity (w)
+    ail_sym, elev_sym, rud_sym,  # control inputs
+    # parameters
+    span, cbar, alpha_stall, blend_width,
+    CL0, CLa, CD0, k_ind, CD0_fp, CY_fp,
+    Clda, Cldr, Clb, Clp, Clr,
+    Cm0, Cma, Cmde, Cmq,
+    Cnb, Cndr, Cnda, Cnp, Cnr,
+    CYb, CYda, CYdr, CYp, CYr,
+    max_defl_ail, max_defl_elev, max_defl_rud,
 ) -> dict[str, ca.SX]:
-    """
-    Compute aerodynamic coefficients with smooth stall model.
-
-    Uses tanh blending between linear (pre-stall) and flat-plate (post-stall) models
-    to create a smooth transition through stall. The blending factor sigma transitions
-    from 0 (linear) to 1 (flat-plate) as alpha exceeds alpha_stall.
-
-    Args
-    ----
-        Vt: Total airspeed (m/s) - must include small epsilon to avoid division by zero
-        alpha: Angle of attack (rad)
-        beta: Sideslip angle (rad)
-        x: Aircraft state (for angular rates)
-        u: Control surface inputs
-        p: Aircraft parameters
-
-    Returns
-    -------
-        Dictionary with keys: CL, CD, CY, Cl, Cm, Cn
-
-    """
+    """Compute aerodynamic coefficients with smooth stall model."""
     # Convert body angular rates to FRD convention
-    w_b_frd = flu_to_frd(x.w)
+    w_b_frd = flu_to_frd(w_sym)
     P, Q, R = w_b_frd[0], w_b_frd[1], w_b_frd[2]
 
-    # Convert normalized control inputs to radians (no trim here - trim is in
-    # controller)
-    ail_rad = clamp(p.max_defl_ail * u.ail, -p.max_defl_ail, p.max_defl_ail)
-    elev_rad = clamp(p.max_defl_elev * u.elev, -
-                     p.max_defl_elev, p.max_defl_elev)
-    rud_rad = clamp(
-        p.max_defl_rud * u.rud * -1, -p.max_defl_rud, p.max_defl_rud
-    )  # Rudder sign convention
+    # Convert normalized control inputs to radians
+    ail_rad = clamp(max_defl_ail * ail_sym, -max_defl_ail, max_defl_ail)
+    elev_rad = clamp(max_defl_elev * elev_sym, -max_defl_elev, max_defl_elev)
+    rud_rad = clamp(max_defl_rud * rud_sym * -1, -max_defl_rud, max_defl_rud)
 
-    sigma = (1 + ca.tanh((alpha - p.alpha_stall) / p.blend_width)) / 2
+    sigma = (1 + ca.tanh((alpha - alpha_stall) / blend_width)) / 2
 
-    CL_lin = p.CL0 + p.CLa * alpha
+    CL_lin = CL0 + CLa * alpha
     CL_fp = 2 * ca.sin(alpha) * ca.cos(alpha)
     CL = (1 - sigma) * CL_lin + sigma * CL_fp
 
-    CD_lin = p.CD0 + p.k_ind * CL_lin**2
-    CD_fp = p.CD0_fp + 2 * ca.sin(alpha) ** 2
-    CD = (1 - sigma) * CD_lin + sigma * CD_fp
+    CD_lin = CD0 + k_ind * CL_lin**2
+    CD_fp_val = CD0_fp + 2 * ca.sin(alpha) ** 2
+    CD = (1 - sigma) * CD_lin + sigma * CD_fp_val
 
     CY_lin = (
-        p.CYb * beta +
-        p.CYda * ail_rad +
-        p.CYdr * rud_rad +
-        p.CYp * (p.span / (2 * Vt)) * P +
-        p.CYr * (p.span / (2 * Vt)) * R
+        CYb * beta +
+        CYda * ail_rad +
+        CYdr * rud_rad +
+        CYp * (span / (2 * Vt)) * P +
+        CYr * (span / (2 * Vt)) * R
     )
-    CY_fp = p.CY_fp * ca.sin(beta) * ca.cos(alpha)
-    CY = (1 - sigma) * CY_lin + sigma * CY_fp
+    CY_fp_val = CY_fp * ca.sin(beta) * ca.cos(alpha)
+    CY = (1 - sigma) * CY_lin + sigma * CY_fp_val
 
-    # Roll, pitch, yaw moments with damping terms
     Cl = (
-        p.Clda * ail_rad +
-        p.Cldr * rud_rad +
-        p.Clb * beta +
-        p.Clp * (p.span / (2 * Vt)) * P +
-        p.Clr * (p.span / (2 * Vt)) * R
+        Clda * ail_rad +
+        Cldr * rud_rad +
+        Clb * beta +
+        Clp * (span / (2 * Vt)) * P +
+        Clr * (span / (2 * Vt)) * R
     )
-    Cm = p.Cm0 + p.Cma * alpha + p.Cmde * \
-        elev_rad + p.Cmq * (p.cbar / (2 * Vt)) * Q
+    Cm = Cm0 + Cma * alpha + Cmde * elev_rad + Cmq * (cbar / (2 * Vt)) * Q
     Cn = (
-        p.Cnb * beta +
-        p.Cndr * rud_rad +
-        p.Cnda * ail_rad +
-        p.Cnp * (p.span / (2 * Vt)) * P +
-        p.Cnr * (p.span / (2 * Vt)) * R
+        Cnb * beta +
+        Cndr * rud_rad +
+        Cnda * ail_rad +
+        Cnp * (span / (2 * Vt)) * P +
+        Cnr * (span / (2 * Vt)) * R
     )
 
     return {'CL': CL, 'CD': CD, 'CY': CY, 'Cl': Cl, 'Cm': Cm, 'Cn': Cn}
 
 
-@beartype
-def aerodynamic_forces_and_moments(
-    x: Union[SportCubStatesQuat, SportCubStatesEuler],
+def _compute_ground_forces(
+    p_sym, v_sym, w_sym,  # state: position, velocity, angular velocity
+    rud_sym,  # control: rudder
     R_eb: SO3DcmLieGroupElement,
-    u: SportCubInputs,
-    p: SportCubParams,
-) -> dict:
-    """
-    Compute aerodynamic forces and moments in body FLU frame.
-
-    Args
-    ----
-        x: Aircraft state
-        R_eb: Rotation from earth to body frame
-        u: Control inputs
-        p: Aircraft parameters
-
-    Returns
-    -------
-        Dictionary with keys: FA_b, MA_b, Vt, alpha, beta, qbar, CL, CD
-
-    """
-    # Convert earth velocity to body frame
-    R_be = R_eb.inverse()
-    v_b = R_be @ x.v
-
-    # Convert to FRD and compute wind axes
-    v_frd = flu_to_frd(v_b)
-    R_b_wind, Vt, alpha_body, beta = wind_axes_from_velocity_frd(v_frd)
-
-    # Add wing incidence angle to get effective angle of attack
-    alpha = alpha_body + p.wing_incidence
-
-    coeff = aero_coefficients(Vt, alpha, beta, x, u, p)
-    qbar = 0.5 * p.rho * Vt**2
-
-    FA_wind_frd = qbar * p.S * \
-        ca.vertcat(-coeff['CD'], coeff['CY'], -coeff['CL'])
-    FA_body_frd = R_b_wind @ FA_wind_frd
-    FA_b = frd_to_flu(FA_body_frd)
-
-    MA_frd = (
-        qbar *
-        p.S *
-        ca.vertcat(
-            p.span * coeff['Cl'],
-            p.cbar * coeff['Cm'],
-            p.span * coeff['Cn'],
-        )
-    )
-    MA_b = frd_to_flu(MA_frd)
-
-    return {
-        'FA_b': FA_b,
-        'MA_b': MA_b,
-        'Vt': Vt,
-        'alpha': alpha,  # Return wing alpha (includes incidence)
-        'beta': beta,
-        'qbar': qbar,
-        'CL': coeff['CL'],
-        'CD': coeff['CD'],
-    }
-
-
-@beartype
-def ground_forces_and_moments(
-    x: Union[SportCubStatesQuat, SportCubStatesEuler],
-    R_eb: SO3DcmLieGroupElement,
-    u: SportCubInputs,
-    p: SportCubParams,
-) -> dict:
-    """
-    Compute ground reaction forces and moments from wheel contact.
-
-    Implements a 3-wheel tricycle landing gear with spring-damper-friction model.
-    Wheel positions are hardcoded in body FLU frame:
-    - Left wheel: (0.1, 0.1, -0.1) - front left
-    - Right wheel: (0.1, -0.1, -0.1) - front right
-    - Tail wheel: (-0.4, 0.0, 0.0) - aft center (steerable via rudder)
-
-    Forces computed in earth frame, then transformed to body frame for moments.
-    Tail wheel steering: rudder input creates a yaw moment when tail wheel is on ground.
-
-    Args
-    ----
-        x: Aircraft state
-        R_eb: Rotation from earth to body frame
-        u: Control inputs (for rudder-linked tail wheel steering)
-        p: Aircraft parameters
-
-    Returns
-    -------
-        Dictionary with keys: FG_b, MG_b
-
-    """
+    # parameters
+    m, ground_wn, ground_zeta, ground_c_xy, ground_mu,
+    ground_max_force_per_wheel, max_defl_rud, tailwheel_steer_gain,
+) -> tuple[ca.SX, ca.SX]:
+    """Compute ground reaction forces and moments."""
     left_wheel_b = ca.SX([0.1, 0.1, -0.1])
     right_wheel_b = ca.SX([0.1, -0.1, -0.1])
     tail_wheel_b = ca.SX([-0.4, 0.0, 0.0])
@@ -478,72 +298,44 @@ def ground_forces_and_moments(
     wheel_b_list = [left_wheel_b, right_wheel_b, tail_wheel_b]
     R_be = R_eb.inverse()
 
-    # Convert earth velocity to body frame
-    v_b = R_be @ x.v
+    v_b = R_be @ v_sym
 
-    ground_k = p.m * p.ground_wn**2
-    ground_c_vert = 2.0 * p.ground_zeta * p.m * p.ground_wn
+    ground_k = m * ground_wn**2
+    ground_c_vert = 2.0 * ground_zeta * m * ground_wn
 
     ground_force_e_list = []
     MG_b = ca.SX.zeros(3)
 
     for i, wheel_b in enumerate(wheel_b_list):
         wheel_e = R_eb @ wheel_b
-        pos_wheel_e = x.p + wheel_e
-        vel_wheel_b = v_b + ca.cross(x.w, wheel_b)
+        pos_wheel_e = p_sym + wheel_e
+        vel_wheel_b = v_b + ca.cross(w_sym, wheel_b)
         vel_wheel_e = R_eb @ vel_wheel_b
         penetration = -pos_wheel_e[2]
 
-        normal_force_unclamped = penetration * \
-            ground_k - vel_wheel_e[2] * ground_c_vert
-        normal_force = clamp(normal_force_unclamped, 0,
-                             p.ground_max_force_per_wheel)
+        normal_force_unclamped = penetration * ground_k - vel_wheel_e[2] * ground_c_vert
+        normal_force = clamp(normal_force_unclamped, 0, ground_max_force_per_wheel)
 
-        lateral_damp = ca.vertcat(-vel_wheel_e[0] *
-                                  p.ground_c_xy, -vel_wheel_e[1] * p.ground_c_xy)
+        lateral_damp = ca.vertcat(-vel_wheel_e[0] * ground_c_xy, -vel_wheel_e[1] * ground_c_xy)
         lateral_mag = ca.norm_2(lateral_damp) + 1e-9
-        max_lateral = p.ground_mu * normal_force
-        scale_lat = ca.if_else(lateral_mag > max_lateral,
-                               max_lateral / lateral_mag, 1.0)
+        max_lateral = ground_mu * normal_force
+        scale_lat = ca.if_else(lateral_mag > max_lateral, max_lateral / lateral_mag, 1.0)
         lateral_limited = scale_lat * lateral_damp
 
-        force_contact_e = ca.vertcat(
-            lateral_limited[0], lateral_limited[1], normal_force)
-        force_e = ca.if_else(
-            pos_wheel_e[2] < 0.0, force_contact_e, ca.vertcat(0, 0, 0))
+        force_contact_e = ca.vertcat(lateral_limited[0], lateral_limited[1], normal_force)
+        force_e = ca.if_else(pos_wheel_e[2] < 0.0, force_contact_e, ca.vertcat(0, 0, 0))
         ground_force_e_list.append(force_e)
 
         force_b = R_be @ force_e
         MG_b += ca.cross(wheel_b, force_b)
 
-        # Tail wheel steering moment (index 2 = tail wheel)
+        # Tail wheel steering
         if i == 2:
-            # Bicycle steering model: steered wheel creates lateral force
-            # Lateral force creates yaw moment: M = F_lateral × arm_length
-            # F_lateral is proportional to slip angle, which depends on:
-            #   - Steering angle (rudder input)
-            #   - Forward velocity (higher speed = more lateral force)
-            # But at very low speeds, the force saturates (friction limited)
-
-            rud_rad = p.max_defl_rud * clamp(u.rud, -1, 1)
-            forward_speed = vel_wheel_e[0]  # Can be positive or negative
-
-            # Lateral force coefficient increases with speed but saturates
-            # At low speeds: friction-limited steering (proportional to normal force)
-            # At high speeds: aerodynamic-like steering (proportional to
-            # velocity)
+            rud_rad = max_defl_rud * clamp(rud_sym, -1, 1)
+            forward_speed = vel_wheel_e[0]
             speed_sq = forward_speed * forward_speed
-            # Smooth transition: F_lat ∝ sqrt(v²) * steer for high speed behavior
-            #                    but limited by friction at low speed
-            lateral_force_factor = ca.sqrt(
-                speed_sq + 1.0) - 1.0  # Smooth, starts at 0
-
-            # Moment = lateral_force_factor * steer_angle * gain
-            # The gain should account for wheelbase (moment arm) and cornering
-            # stiffness
-            tailwheel_moment_z = p.tailwheel_steer_gain * rud_rad * lateral_force_factor
-
-            # Apply moment only when wheel is on ground
+            lateral_force_factor = ca.sqrt(speed_sq + 1.0) - 1.0
+            tailwheel_moment_z = tailwheel_steer_gain * rud_rad * lateral_force_factor
             tailwheel_moment_b = ca.if_else(
                 pos_wheel_e[2] < 0.0,
                 ca.vertcat(0, 0, tailwheel_moment_z),
@@ -553,10 +345,7 @@ def ground_forces_and_moments(
 
     FG_b = R_be @ ca.sum2(ca.horzcat(*ground_force_e_list))
 
-    return {
-        'FG_b': FG_b,
-        'MG_b': MG_b,
-    }
+    return FG_b, MG_b
 
 
 # ============================================================================
@@ -565,141 +354,163 @@ def ground_forces_and_moments(
 
 
 @beartype
-def sportcub(attitude_rep: AttitudeRep = 'quat') -> ModelSX:
+def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
     """
     Create SportCub 6-DOF aircraft model.
 
     Frames: e=earth (ENU inertial), b=body (FLU), wind=aligned with velocity
 
-    Args
-    ----
+    Args:
         attitude_rep: 'quat' (default) for quaternions (ROS2 compatible, no singularities)
                      'euler' for Euler angles (better for linearization analysis)
 
-    Returns
-    -------
-        ModelSX instance with selected attitude representation
-
+    Returns:
+        Model instance with selected attitude representation
     """
+    # Select state class based on attitude representation
     if attitude_rep == 'quat':
-        model = ModelSX.create(
-            SportCubStatesQuat,
-            SportCubInputs,
-            SportCubParams,
-            output_type=SportCubOutputs,
-        )
+        model_type = SportCubQuat
     elif attitude_rep == 'euler':
-        model = ModelSX.create(
-            SportCubStatesEuler,
-            SportCubInputs,
-            SportCubParams,
-            output_type=SportCubOutputs,
-        )
+        model_type = SportCubEuler
     else:
         raise ValueError(f'Invalid attitude representation: {attitude_rep}')
+    
+    model = Model(model_type)
+    
+    # Shortcuts for typed views
+    x = model.x  # states
+    u = model.u  # inputs
+    p = model.p  # parameters
+    y = model.y  # outputs
 
-    x, u, p, y = model.x, model.u, model.p, model.y
-
-    # Get attitude representation from the state class
-    attitude_rep = model.state_type.attitude_rep
-
+    # Build inertia tensor
     J = ca.SX.zeros(3, 3)
-    J[0, 0] = p.Jx
-    J[1, 1] = p.Jy
-    J[2, 2] = p.Jz
-    J[0, 2] = p.Jxz
-    J[2, 0] = p.Jxz
+    J[0, 0] = p.Jx.sym
+    J[1, 1] = p.Jy.sym
+    J[2, 2] = p.Jz.sym
+    J[0, 2] = p.Jxz.sym
+    J[2, 0] = p.Jxz.sym
 
     xAxis = ca.vertcat(1, 0, 0)
     zAxis = ca.vertcat(0, 0, 1)
 
-    # Get rotation matrix and attitude element (SO3 group element) based on
-    # representation
+    # Get rotation matrix and attitude element based on representation
     if attitude_rep == 'quat':
-        R_eb = lie.SO3Dcm.from_Quat(lie.SO3Quat.elem(x.r))
-        att = lie.SO3Quat.elem(x.r)  # SO3 group element (quaternion)
-    elif attitude_rep == 'euler':
-        R_eb = lie.SO3Dcm.from_Euler(lie.SO3EulerB321.elem(x.r))
-        att = lie.SO3EulerB321.elem(x.r)  # SO3 group element (Euler B321)
-    else:
-        raise ValueError(f'Invalid attitude representation: {attitude_rep}')
+        R_eb = lie.SO3Dcm.from_Quat(lie.SO3Quat.elem(x.r.sym))
+        att = lie.SO3Quat.elem(x.r.sym)
+    else:  # euler
+        R_eb = lie.SO3Dcm.from_Euler(lie.SO3EulerB321.elem(x.r.sym))
+        att = lie.SO3EulerB321.elem(x.r.sym)
 
     R_be = R_eb.inverse()
 
-    # Compute forces and moments (pure functions returning dicts)
-    aero = aerodynamic_forces_and_moments(x, R_eb, u, p)
-    ground = ground_forces_and_moments(x, R_eb, u, p)
+    # Convert earth velocity to body frame for aero calculations
+    v_b = R_be @ x.v.sym
+    v_frd = flu_to_frd(v_b)
+    R_b_wind, Vt, alpha_body, beta = wind_axes_from_velocity_frd(v_frd)
+    alpha = alpha_body + p.wing_incidence.sym
 
-    # Extract forces and moments
-    FA_b = aero['FA_b']
-    MA_b = aero['MA_b']
-    FG_b = ground['FG_b']
-    MG_b = ground['MG_b']
+    # Compute aerodynamic coefficients
+    coeff = _compute_aero_coefficients(
+        Vt, alpha, beta,
+        x.w.sym,
+        u.ail.sym, u.elev.sym, u.rud.sym,
+        p.span.sym, p.cbar.sym, p.alpha_stall.sym, p.blend_width.sym,
+        p.CL0.sym, p.CLa.sym, p.CD0.sym, p.k_ind.sym, p.CD0_fp.sym, p.CY_fp.sym,
+        p.Clda.sym, p.Cldr.sym, p.Clb.sym, p.Clp.sym, p.Clr.sym,
+        p.Cm0.sym, p.Cma.sym, p.Cmde.sym, p.Cmq.sym,
+        p.Cnb.sym, p.Cndr.sym, p.Cnda.sym, p.Cnp.sym, p.Cnr.sym,
+        p.CYb.sym, p.CYda.sym, p.CYdr.sym, p.CYp.sym, p.CYr.sym,
+        p.max_defl_ail.sym, p.max_defl_elev.sym, p.max_defl_rud.sym,
+    )
 
-    FT_b = p.thr_max * clamp(u.thr, 0, 1) * xAxis
+    qbar = 0.5 * p.rho.sym * Vt**2
+
+    # Aerodynamic forces
+    FA_wind_frd = qbar * p.S.sym * ca.vertcat(-coeff['CD'], coeff['CY'], -coeff['CL'])
+    FA_body_frd = R_b_wind @ FA_wind_frd
+    FA_b = frd_to_flu(FA_body_frd)
+
+    # Aerodynamic moments
+    MA_frd = qbar * p.S.sym * ca.vertcat(
+        p.span.sym * coeff['Cl'],
+        p.cbar.sym * coeff['Cm'],
+        p.span.sym * coeff['Cn'],
+    )
+    MA_b = frd_to_flu(MA_frd)
+
+    # Ground forces
+    FG_b, MG_b = _compute_ground_forces(
+        x.p.sym, x.v.sym, x.w.sym,
+        u.rud.sym,
+        R_eb,
+        p.m.sym, p.ground_wn.sym, p.ground_zeta.sym, p.ground_c_xy.sym, p.ground_mu.sym,
+        p.ground_max_force_per_wheel.sym, p.max_defl_rud.sym, p.tailwheel_steer_gain.sym,
+    )
+
+    # Thrust
+    FT_b = p.thr_max.sym * clamp(u.thr.sym, 0, 1) * xAxis
     MT_b = ca.SX.zeros(3)
 
-    FW_b = R_be @ (-p.m * p.g * zAxis)
+    # Weight
+    FW_b = R_be @ (-p.m.sym * p.g.sym * zAxis)
     MW_b = ca.SX.zeros(3)
 
     # Total forces and moments
-    F_b = (1.0 - p.disable_aero) * FA_b + \
-        (1.0 - p.disable_gf) * FG_b + FT_b + FW_b
-    M_b = (1.0 - p.disable_aero) * MA_b + \
-        (1.0 - p.disable_gf) * MG_b + MT_b + MW_b
+    F_b = (1.0 - p.disable_aero.sym) * FA_b + (1.0 - p.disable_gf.sym) * FG_b + FT_b + FW_b
+    M_b = (1.0 - p.disable_aero.sym) * MA_b + (1.0 - p.disable_gf.sym) * MG_b + MT_b + MW_b
 
-    # Assign all outputs
-    y.Vt = aero['Vt']
-    y.alpha = aero['alpha']
-    y.beta = aero['beta']
-    y.qbar = aero['qbar']
-    y.CL = aero['CL']
-    y.CD = aero['CD']
-    y.FA_b = FA_b
-    y.FG_b = FG_b
-    y.FT_b = FT_b
-    y.FW_b = FW_b
-    y.F_b = F_b
-    y.MA_b = MA_b
-    y.MG_b = MG_b
-    y.MT_b = MT_b
-    y.MW_b = MW_b
-    y.M_b = M_b
+    # Define outputs
+    model.output(y.Vt, Vt)
+    model.output(y.alpha, alpha)
+    model.output(y.beta, beta)
+    model.output(y.qbar, qbar)
+    model.output(y.CL, coeff['CL'])
+    model.output(y.CD, coeff['CD'])
+    model.output(y.FA_b, FA_b)
+    model.output(y.FG_b, FG_b)
+    model.output(y.FT_b, FT_b)
+    model.output(y.FW_b, FW_b)
+    model.output(y.F_b, F_b)
+    model.output(y.MA_b, MA_b)
+    model.output(y.MG_b, MG_b)
+    model.output(y.MT_b, MT_b)
+    model.output(y.MW_b, MW_b)
+    model.output(y.M_b, M_b)
 
-    # Always output quaternion for ROS2 compatibility
+    # Quaternion output for ROS2 compatibility
     if attitude_rep == 'quat':
-        y.q = x.r
+        model.output(y.q, x.r.sym)
     else:  # euler
         quat_group = lie.SO3Quat.from_Euler(att)
-        y.q = quat_group.param
+        model.output(y.q, quat_group.param)
 
     # Dynamics equations
-    p_dot = x.v
+    p_dot = x.v.sym
     F_e = R_eb @ F_b
-    v_dot = F_e / p.m  # No additional gravity term - already in F_b
+    v_dot = F_e / p.m.sym
 
-    # Attitude derivative: att_dot = J @ w_body
-    # The right_jacobian() method returns the kinematic matrix J for each
-    # representation
-    if attitude_rep == 'quat':
-        # Quaternion kinematics (no singularities)
-        att_dot = att.right_jacobian() @ x.w
-    else:  # euler
-        # Euler B321 kinematics (singularity at theta = ±90°)
-        # For [psi, theta, phi], returns 3x3 matrix J such that euler_dot = J @
-        # w_body
-        att_dot = att.right_jacobian() @ x.w
+    # Attitude derivative
+    att_dot = att.right_jacobian() @ x.w.sym
 
-    w_dot = ca.inv(J) @ (M_b - ca.cross(x.w, J @ x.w))
+    # Angular velocity derivative
+    w_dot = ca.inv(J) @ (M_b - ca.cross(x.w.sym, J @ x.w.sym))
 
-    f_x = ca.vertcat(p_dot, v_dot, att_dot, w_dot)
-    f_y = y.as_vec()
+    # Define ODEs
+    model.ode(x.p, p_dot)
+    model.ode(x.v, v_dot)
+    model.ode(x.r, att_dot)
+    model.ode(x.w, w_dot)
 
-    model.build(f_x=f_x, f_y=f_y, integrator='rk4',
-                integrator_options={'N': 100})
+    model.build(integrator='rk4', integrator_options={'N': 100})
     return model
 
 
 __all__ = [
     'sportcub',
+    'StatesQuat',
+    'StatesEuler',
+    'Inputs',
+    'Parameters',
+    'Outputs',
 ]
