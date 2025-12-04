@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from cyecca.planning.dubins import derive_dubins, DubinsPathType
 from polynomial_optimization import run_poly_optimization, plot_piecewise_polynomials, plot_derivatives
+from numpy.lib.stride_tricks import sliding_window_view
 
 
 plan_fn, eval_fn = derive_dubins()
@@ -347,6 +348,33 @@ def apply_polynomial_offset_to_dubins(dubins_path, polynomial_coeffs, tau_durati
     
     return offsetted_path, arc_lengths, lateral_offsets
 
+# Clean output
+def rolling_median_replace(x, window=7, thresh=3.0, replace_with='median'):
+    x = np.asarray(x, dtype=float)
+    if window % 2 == 0:
+        raise ValueError("window must be odd")
+    k = (window - 1) // 2
+    sw = sliding_window_view(x, window)
+    med = np.median(sw, axis=1)
+    med_full = np.pad(med, (k, k), mode='edge')
+
+    residual = np.abs(x - med_full)
+    sigma_est = np.median(np.abs(x - np.median(x))) * 1.4826
+    if sigma_est == 0:
+        sigma_est = np.std(x) + 1e-12
+    outliers = residual > (thresh * sigma_est)
+
+    x_clean = x.copy()
+    if replace_with == 'median':
+        x_clean[outliers] = med_full[outliers]
+    else:  # interpolate across outliers
+        good = ~outliers
+        x_clean[outliers] = np.interp(np.flatnonzero(outliers),
+                                      np.flatnonzero(good),
+                                      x[good])
+    return x_clean
+
+
 if __name__ == '__main__':
     # Multi-Waypoint Dubins Path
     # Connect 6 waypoints with Dubins trajectories, showing detailed segment breakdown
@@ -501,7 +529,7 @@ if __name__ == '__main__':
 
 
 
-    
+
     segments = (len(waypoints)-1) * 3
     R = 8.0#/(42.7781*7.5)  # Turning radius
 

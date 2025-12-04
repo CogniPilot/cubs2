@@ -26,6 +26,8 @@ from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 from tf_transformations import quaternion_from_euler
 from visualization_msgs.msg import MarkerArray
+from dubins_offset import plan_dubins_path, evaluate_dubins_path, compute_curvature_from_xy, extract_dubins_segments, apply_polynomial_offset_to_dubins, rolling_median_replace
+from polynomial_optimization import run_poly_optimization
 
 
 class DubinsGatePlannerNode(Node):
@@ -98,8 +100,8 @@ class DubinsGatePlannerNode(Node):
             self.get_logger().error(f'Available gates: 0-{len(all_gates) - 1}')
             return []
 
-        self.get_logger().info(f"gate sequence: {
-            ' → '.join([g.name for g in ordered_gates])}")
+        # self.get_logger().info(f"gate sequence: {
+        #     ' → '.join([g.name for g in ordered_gates])}")
 
         segments = []
 
@@ -142,12 +144,244 @@ class DubinsGatePlannerNode(Node):
                 }
             )
 
+
+
             self.get_logger().debug(
                 f'{g0.name} → {g1.name}: type={DubinsPathType.name(ptype)}, cost={
                     float(cost):.2f}'
             )
 
-        return segments
+        ## My Code
+        # ...
+
+        waypoints = []
+        for i, gate in enumerate(ordered_gates):
+            waypoints.append({'pos': gate.center, 'yaw': gate.yaw, 'name': f'WP{i}'})
+
+        # waypoints = [
+        #         {'pos': [0, 0], 'yaw': np.pi/4, 'name': 'Start'},
+        #         {'pos': [20, 20], 'yaw': np.pi/2, 'name': 'WP 1'},
+        #         {'pos': [-20, 20], 'yaw': -np.pi/2, 'name': 'WP 2'},
+        #         {'pos': [20, -20], 'yaw': -np.pi/2, 'name': 'WP 3'},
+        #         {'pos': [-20, -20], 'yaw': np.pi/2, 'name': 'WP 4'},
+        #         {'pos': [0, 0], 'yaw': np.pi/4, 'name': 'End'}
+        #     ]
+
+        turn_radius = R
+        num_points_per_segment = n
+
+        # Plan Dubins paths between consecutive waypoints
+        dubins_paths = []
+        dubins_plans = []
+
+        segment_L = []
+        segment_direction = []
+        print("Waypoints!!!", len(waypoints))
+        for i in range(len(waypoints) - 1):
+            print("Here")
+            wp_start = waypoints[i]
+            wp_end = waypoints[i + 1]
+            
+            # Plan Dubins path
+            plan = plan_dubins_path(
+                wp_start['pos'],
+                wp_start['yaw'],
+                wp_end['pos'],
+                wp_end['yaw'],
+                turn_radius
+            )
+            dubins_plans.append(plan)
+            
+            # Evaluate path
+            path_points = evaluate_dubins_path(
+                plan,
+                wp_start['pos'],
+                wp_start['yaw'],
+                wp_end['pos'],
+                wp_end['yaw'],
+                turn_radius,
+                num_points=num_points_per_segment
+            )
+            dubins_paths.append(path_points)
+            
+            # Calculate segment lengths from evaluated path
+            path_type = plan['type']
+            total_seg_length = 0
+            for j in range(1, len(path_points)):
+                total_seg_length += np.linalg.norm(path_points[j, :2] - path_points[j-1, :2])
+            
+            # Use the plan's a1, d, a2 values (angles and straight distance)
+            # Convert to scalars if they're arrays
+            a1 = float(np.atleast_1d(plan['a1'])[0])
+            d = float(np.atleast_1d(plan['d'])[0])
+            a2 = float(np.atleast_1d(plan['a2'])[0])
+            
+            # Calculate arc lengths from angles
+            L1 = a1 * turn_radius      # Arc 1 length
+            L2 = d                     # Straight length
+            L3 = a2 * turn_radius      # Arc 2 length
+
+            segment_L.append(L1)
+            segment_L.append(L2)
+            segment_L.append(L3)
+            
+            
+            a1_deg = float(np.degrees(a1))
+            a2_deg = float(np.degrees(a2))
+
+            segment_direction.append('L' if path_type[0] == 'L' else 'R')
+            segment_direction.append('S')
+            segment_direction.append('L' if path_type[2] == 'L' else 'R')
+            
+            
+            # Combine all segments into one continuous path
+            full_path = np.vstack(dubins_paths)
+
+            # Right plot: Heading angle vs arc length
+            arc_lengths = np.zeros(len(full_path))
+            for i in range(1, len(full_path)):
+                arc_lengths[i] = arc_lengths[i-1] + np.linalg.norm(full_path[i, :2] - full_path[i-1, :2])
+
+            arc_lengths_norm = arc_lengths #/ arc_lengths[-1]
+            # Mark waypoint transitions
+            segment_boundaries = []
+            current_pos = 0
+            # for i, path in enumerate(dubins_paths[:-1]):
+            #     current_pos += len(path) #/ len(full_path)
+            #     ax2.axvline(current_pos, color='red', linestyle='--', linewidth=1.5, alpha=0.5)
+            #     ax2.text(current_pos, ax2.get_ylim()[1] * 0.95, f'WP {i+1}', 
+            #             rotation=90, fontsize=10, ha='right', color='red')
+            
+        segments_count = (len(waypoints)-1) * 3
+
+        boundary_positions = [[*([0, None, None]*len(waypoints)),0]]      # Position: start=0, end=
+        boundary_velocities = [[0, *([None]*(segments_count-1)), 0]]       # Velocity: start=0, others free
+
+        if segment_direction[0] == 'R':
+            start_condition = 1/R
+        elif segment_direction[0] == 'L':
+            start_condition = -1/R
+        else:
+            assert -1 > 0 # "PANNIC"
+
+        if segment_direction[-1] == 'R':
+            end_condition = 1/R
+        elif segment_direction[-1] == 'L':
+            end_condition = -1/R
+        else:
+            assert -1 > 0 # "PANNIC"
+
+
+        boundary_accelerations = [[start_condition, *([None]*(segments_count-1)), end_condition]]    # Acceleration: start=0
+
+        boundary_jerk = [[None]*(segments_count+1)]             # Jerk: start=0
+        boundary_snap =  [[None]*(segments_count+1)]              # Snap: start=0
+        boundary_crackle = [[None]*(segments_count+1)]            # Snap: start=0
+        boundary_pop = [[None]*(segments_count+1)]             # Snap: start=0
+        boundary_lock = [[None]*(segments_count+1)]            # Snap: start=0
+
+        boundary_conditions = [
+            boundary_positions,
+            boundary_velocities,
+            boundary_accelerations,
+            boundary_jerk,
+            boundary_snap,
+            boundary_crackle,
+            boundary_pop,
+            boundary_lock
+        ]
+
+        continuity_changes = []
+        i = 0
+        for segment in segment_direction[0:-1]:
+
+            current_segment = segment
+            next_segment = segment_direction[i+1]
+
+            value = None
+            print(current_segment, next_segment)
+            match current_segment:
+                case 'R':
+                    if next_segment == 'R':
+                        value = 0
+                    elif next_segment == 'L':
+                        value = -2/R
+                    elif next_segment == 'S':
+                        value = -1/R
+                case 'L':
+                    if next_segment == 'R':
+                        value = 2/R
+                    elif next_segment == 'L':
+                        value = 0
+                    elif next_segment == 'S':
+                        value = 1/R
+                case 'S':
+                    if next_segment == 'R':
+                        value = 1/R
+                    elif next_segment == 'L':
+                        value = -1/R
+                    elif next_segment == 'S':
+                        value = 0
+                case _:
+                    assert -1 > 0
+            if value != 0:
+                continuity_changes.append([2 + i*5, value])  # Default to 0
+            i += 1
+
+        tau = np.abs(segment_L)  # Segment durations
+
+        # Solve optimization problem
+        print(segment_L)
+        print(tau)
+        print(segments_count)
+
+        outputs = run_poly_optimization(
+            order=7,
+            tau=tau,
+            segments=segments_count,
+            weights=[0.1, 0.1, 0.1, 0.1, 100000, 0.1, 0.1, 0.1],  # Minimize snap (4th derivative)
+            boundary_conditions=boundary_conditions,
+            continuity=continuity_changes
+        )
+
+        offsetted_dubins, arc_lengths, lateral_offsets = apply_polynomial_offset_to_dubins(
+            full_path, outputs['polys'], tau
+        )
+        
+        pts = offsetted_dubins  
+        dx = np.diff(pts[:, 0])
+        dy = np.diff(pts[:, 1])
+
+        pts = offsetted_dubins 
+
+        dx = np.diff(pts[:, 0])
+        dy = np.diff(pts[:, 1])
+        dx = np.append(dx, dx[-1])
+        dy = np.append(dy, dy[-1])
+
+
+        heading = rolling_median_replace(np.arctan2(dy, dx), thresh=0.1)
+
+        segments_new = []
+
+        i = 0
+        for segment in segments:
+            new_points = []
+            for point in segment['points']:
+                new_points.append(
+                    {'pos': [float(pts[i,0]), float(pts[i,1]), point['pos'][2]], 'psi': float(heading[i])}
+                )
+                i += 1
+            segments_new.append(
+            {
+                'points': new_points,
+                'centers': segment['centers'],
+                'z': segment['z'],
+            }
+        )
+
+
+        return segments_new
 
     def _compute_trajectory_timing(self):
         """Calculate arc length, time, and heading rate for each trajectory point."""
@@ -196,7 +430,15 @@ class DubinsGatePlannerNode(Node):
 
             self.trajectory_points[i]['psi_dot'] = psi_dot
             self.trajectory_points[i]['bank'] = bank
+        
+        # change to numpy array
+        bank_angles = np.array([point['bank'] for point in self.trajectory_points])
+        bank_angles = rolling_median_replace(bank_angles,thresh=0.1)
 
+        for i, bank_angle in enumerate(bank_angles):
+            self.trajectory_points[i]['bank'] = bank_angle
+
+        # print(self.trajectory_points[:])#['bank'] = 
         self.total_trajectory_time = self.trajectory_points[-1]['time']
         self.get_logger().info(
             f'trajectory: {cumulative_length:.2f}m, {
