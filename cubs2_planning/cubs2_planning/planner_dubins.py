@@ -28,6 +28,8 @@ from tf_transformations import quaternion_from_euler
 from visualization_msgs.msg import MarkerArray
 from dubins_offset import plan_dubins_path, evaluate_dubins_path, compute_curvature_from_xy, extract_dubins_segments, apply_polynomial_offset_to_dubins, rolling_median_replace
 from polynomial_optimization import run_poly_optimization
+from tf2_ros import Buffer, TransformListener, LookupException
+
 
 
 class DubinsGatePlannerNode(Node):
@@ -52,6 +54,7 @@ class DubinsGatePlannerNode(Node):
         self.declare_parameter('planner.velocity', 5.0)
         self.declare_parameter('reference_frame_id',
                                'reference')  # TF frame name
+        self.declare_parameter('max_distance', 10)
 
         self.marker_pub = self.create_publisher(
             MarkerArray, 'dubins_trajectory', 10)
@@ -84,6 +87,45 @@ class DubinsGatePlannerNode(Node):
             0.02, self.publish_reference_tf)  # 50 Hz TF updates
 
         self.get_logger().info('started')
+        self.previous_time = self.start_time
+        self.elapsed_time = 0
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        # Change these to your frame names
+        self.frame_ref = self.get_parameter('reference_frame_id').value
+        self.frame_true = 'vehicle'
+
+        # Timer — check at 30 Hz
+        self.timer = self.create_timer(1.0/100.0, self.update_distance)
+        self.dist = 0
+
+    def update_distance(self):
+        try:
+            # lookup_transform(target_frame, source_frame, time)
+            tf_ref = self.tf_buffer.lookup_transform(
+                self.racecourse.frame_id, self.frame_ref, rclpy.time.Time())
+            tf_true = self.tf_buffer.lookup_transform(
+                self.racecourse.frame_id, self.frame_true, rclpy.time.Time())
+        except LookupException:
+            self.get_logger().warn("TF not available yet")
+            return
+
+        # Extract XYZ
+        ax = tf_ref.transform.translation.x
+        ay = tf_ref.transform.translation.y
+        az = tf_ref.transform.translation.z
+
+        bx = tf_true.transform.translation.x
+        by = tf_true.transform.translation.y
+        bz = tf_true.transform.translation.z
+
+        # Euclidean distance
+        self.dist = np.linalg.norm(np.array([ax-bx, ay-by, az-bz]))
+
+        self.get_logger().info(f"Distance({self.frame_ref}, {self.frame_true}) = {self.dist:.3f} m")
+
 
     def plan_trajectory(self):
         R = self.get_parameter('turn_radius').value
@@ -176,9 +218,7 @@ class DubinsGatePlannerNode(Node):
 
         segment_L = []
         segment_direction = []
-        print("Waypoints!!!", len(waypoints))
         for i in range(len(waypoints) - 1):
-            print("Here")
             wp_start = waypoints[i]
             wp_end = waypoints[i + 1]
             
@@ -331,9 +371,6 @@ class DubinsGatePlannerNode(Node):
         tau = np.abs(segment_L)  # Segment durations
 
         # Solve optimization problem
-        print(segment_L)
-        print(tau)
-        print(segments_count)
 
         outputs = run_poly_optimization(
             order=7,
@@ -449,9 +486,18 @@ class DubinsGatePlannerNode(Node):
         """Publish TF frame at current reference position based on elapsed time."""
         if not self.trajectory_points:
             return
+        
+        print("What is happening", self.dist)
 
         current_time = self.get_clock().now()
-        elapsed = (current_time - self.start_time).nanoseconds / 1e9
+        if self.dist < self.get_parameter('max_distance').value:
+            dt = (current_time - self.previous_time).nanoseconds
+            self.elapsed_time += dt
+            
+        self.previous_time = current_time
+
+        elapsed = self.elapsed_time / 1e9
+        # elapsed = (current_time - self.start_time).nanoseconds / 1e9
 
         # Loop the trajectory
         trajectory_time = elapsed % self.total_trajectory_time
