@@ -164,6 +164,7 @@ class GamepadControlNode(Node):
         self.elevator = 0.0
         self.throttle = self.throttle_default
         self.rudder = 0.0
+        self.mode = 0  # 0 = manual, 1 = stabilized
 
         # Trim values (applied as offsets to stick inputs)
         self.trim_aileron = 0.0
@@ -217,6 +218,8 @@ class GamepadControlNode(Node):
             f'  Button {self.btn_trim_rud_left} (X): Trim rudder left')
         self.get_logger().info(
             f'  Button {self.btn_trim_rud_right} (Y): Trim rudder right')
+        self.get_logger().info(
+            f'  Button {self.btn_right_bumper}: Toggle flight mode (manual/stabilized)')
         dpad_type = (
             'buttons' if self.dpad_is_buttons else f'axes ({
                 self.axis_dpad_h}, {
@@ -509,6 +512,12 @@ class GamepadControlNode(Node):
                 else:
                     self.trim_hold_count[self.btn_dpad_right] = 0
 
+            # Button: Toggle flight mode (manual/stabilized)
+            if self._button_pressed(msg, self.btn_right_bumper):
+                self.mode = 1 - self.mode  # Toggle between 0 and 1
+                mode_name = 'STABILIZED' if self.mode == 1 else 'MANUAL'
+                self.get_logger().info(f'Flight mode changed to: {mode_name}')
+
             # Button: Exit node
             if self._button_pressed(msg, self.btn_exit):
                 self.get_logger().info('Exit button pressed, shutting down...')
@@ -591,6 +600,7 @@ class GamepadControlNode(Node):
         msg.elevator = float(self.elevator)
         msg.throttle = float(self.throttle)
         msg.rudder = float(self.rudder)
+        msg.mode = int(self.mode)
         self.pub_control.publish(msg)
 
 

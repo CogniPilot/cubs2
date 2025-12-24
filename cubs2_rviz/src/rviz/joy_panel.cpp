@@ -343,9 +343,10 @@ void JoyPanel::publishControlInputs()
   control_msg.elevator = static_cast<float>(elevator_ + elevator_trim_);
   control_msg.throttle = static_cast<float>(throttle_);
   control_msg.rudder = static_cast<float>(rudder_);
+  control_msg.mode = static_cast<uint8_t>(mode_);
   joy_publisher_->publish(control_msg);
 
-  // Publish mode
+  // Also publish mode to /control_mode topic for backward compatibility
   std_msgs::msg::Float32 mode_msg;
   mode_msg.data = static_cast<float>(mode_);
   mode_publisher_->publish(mode_msg);
@@ -386,10 +387,25 @@ void JoyPanel::onEnabledChanged(int state)
 void JoyPanel::onModeChanged(int index)
 {
   mode_ = index;  // 0 = manual, 1 = stabilized
+  
+  // Publish mode change immediately when user toggles the combobox
+  if (enabled_ && node_) {
+    std_msgs::msg::Float32 mode_msg;
+    mode_msg.data = static_cast<float>(mode_);
+    mode_publisher_->publish(mode_msg);
+  }
 }
 
 void JoyPanel::controlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg)
 {
+  // Update mode combobox if changed from external source (gamepad, etc.)
+  if (static_cast<int>(msg->mode) != mode_) {
+    mode_ = static_cast<int>(msg->mode);
+    mode_combo_->blockSignals(true);
+    mode_combo_->setCurrentIndex(mode_);
+    mode_combo_->blockSignals(false);
+  }
+  
   // Only update display if disabled (showing external control)
   if (!enabled_) {
     updateDisplayFromExternal(msg->aileron, msg->elevator, msg->throttle, msg->rudder);
