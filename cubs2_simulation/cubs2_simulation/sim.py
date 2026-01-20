@@ -241,6 +241,7 @@ class SimNode(Node):
         return ca.vertcat(ail_out, elev_out, rud_out, thr_out)
 
     @beartype
+    @beartype
     def control_callback(self, msg: AircraftControl) -> None:
         """Handle AircraftControl messages."""
         # Store manual control inputs

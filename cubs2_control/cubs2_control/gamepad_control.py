@@ -159,6 +159,11 @@ class GamepadControlNode(Node):
         self.sub_joy = self.create_subscription(
             Joy, '/joy', self.joy_callback, qos_profile)
 
+        # Subscribe to external control messages (from RViz dropdown, etc.)
+        # to sync mode changes from other sources
+        self.sub_control = self.create_subscription(
+            AircraftControl, '/control', self.control_callback, 10)
+
         # Current state
         self.aileron = 0.0
         self.elevator = 0.0
@@ -591,6 +596,20 @@ class GamepadControlNode(Node):
 
         # Publish control messages
         self.publish_controls()
+
+    def control_callback(self, msg: AircraftControl):
+        """
+        Listen for external control messages (e.g., from RViz dropdown).
+        
+        Syncs mode changes from other sources so both gamepad and dropdown
+        control the same mode.
+        """
+        # Update mode if it changed externally (e.g., from RViz dropdown)
+        external_mode = int(msg.mode)
+        if external_mode != self.mode:
+            self.mode = external_mode
+            mode_name = 'STABILIZED' if self.mode == 1 else 'MANUAL'
+            self.get_logger().info(f'Flight mode synced to: {mode_name}')
 
     def publish_controls(self):
         """Publish current control state as AircraftControl message."""
