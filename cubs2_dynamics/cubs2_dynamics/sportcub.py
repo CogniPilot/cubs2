@@ -25,6 +25,7 @@ import cyecca.lie as lie
 from cyecca.lie.group_so3 import SO3DcmLieGroupElement
 import cyecca.sym as cy
 import numpy as np
+import casadi as ca
 
 AttitudeRep = Literal['quat', 'euler']
 
@@ -65,7 +66,7 @@ class _Base:
     # Geometry
     cbar: float = param(0.09, desc='mean chord (m)')
     span: float = param(0.617, desc='wingspan (m)')
-    wing_incidence: float = param(np.deg2rad(6.0), desc='wing incidence angle (rad)')
+    wing_incidence: float = param(np.deg2rad(6.0), desc='wing incidence angle (rad)') # Verify
 
     # Pitch coefficients
     Cm0: float = param(0.0, desc='pitch moment coeff')
@@ -205,8 +206,6 @@ def wind_axes_from_velocity_frd(
     Vt = cy.norm_2(v_frd) + eps
     w_x = v_frd / Vt
 
-    # Import casadi for SX type - needed for zeros initialization
-    import casadi as ca
     b_x = ca.SX([1, 0, 0])
     b_z = ca.SX([0, 0, 1])
 
@@ -300,8 +299,6 @@ def _compute_ground_forces(
     ground_max_force_per_wheel, max_defl_rud, tailwheel_steer_gain,
 ) -> tuple[cy.SXType, cy.SXType]:
     """Compute ground reaction forces and moments."""
-    # Import casadi for SX type - needed for zeros initialization
-    import casadi as ca
 
     left_wheel_b = ca.SX([0.1, 0.1, -0.1])
     right_wheel_b = ca.SX([0.1, -0.1, -0.1])
@@ -392,16 +389,13 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
     else:
         raise ValueError(f'Invalid attitude representation: {attitude_rep}')
 
-    model = Model(model_type)
+    airplane = Model(model_type)
 
     # Shortcuts for typed views
-    x = model.x  # states
-    u = model.u  # inputs
-    p = model.p  # parameters
-    y = model.y  # outputs
-
-    # Import casadi for SX type - needed for matrix initialization
-    import casadi as ca
+    x = airplane.x  # states
+    u = airplane.u  # inputs
+    p = airplane.p  # parameters
+    y = airplane.y  # outputs
 
     # Build inertia tensor
     J = ca.SX.zeros(3, 3)
@@ -428,11 +422,12 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
     v_b = R_be @ x.v.sym
     v_frd = flu_to_frd(v_b)
     R_b_wind, Vt, alpha_body, beta = wind_axes_from_velocity_frd(v_frd)
-    alpha = alpha_body + p.wing_incidence.sym
+    alpha_wing = alpha_body + p.wing_incidence.sym
 
     # Compute aerodynamic coefficients
-    coeff = _compute_aero_coefficients(
-        Vt, alpha, beta,
+    # TODO This incorrectly accounts for wing incidence in alpha for moments/tail
+    coeff = _compute_aero_coefficients( 
+        Vt, alpha_wing, beta,
         x.w.sym,
         u.ail.sym, u.elev.sym, u.rud.sym,
         p.span.sym, p.cbar.sym, p.alpha_stall.sym, p.blend_width.sym,
@@ -481,29 +476,29 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
     M_b = (1.0 - p.disable_aero.sym) * MA_b + (1.0 - p.disable_gf.sym) * MG_b + MT_b + MW_b
 
     # Define outputs
-    model.output(y.Vt, Vt)
-    model.output(y.alpha, alpha)
-    model.output(y.beta, beta)
-    model.output(y.qbar, qbar)
-    model.output(y.CL, coeff['CL'])
-    model.output(y.CD, coeff['CD'])
-    model.output(y.FA_b, FA_b)
-    model.output(y.FG_b, FG_b)
-    model.output(y.FT_b, FT_b)
-    model.output(y.FW_b, FW_b)
-    model.output(y.F_b, F_b)
-    model.output(y.MA_b, MA_b)
-    model.output(y.MG_b, MG_b)
-    model.output(y.MT_b, MT_b)
-    model.output(y.MW_b, MW_b)
-    model.output(y.M_b, M_b)
+    airplane.output(y.Vt, Vt)
+    airplane.output(y.alpha, alpha_wing)
+    airplane.output(y.beta, beta)
+    airplane.output(y.qbar, qbar)
+    airplane.output(y.CL, coeff['CL'])
+    airplane.output(y.CD, coeff['CD'])
+    airplane.output(y.FA_b, FA_b)
+    airplane.output(y.FG_b, FG_b)
+    airplane.output(y.FT_b, FT_b)
+    airplane.output(y.FW_b, FW_b)
+    airplane.output(y.F_b, F_b)
+    airplane.output(y.MA_b, MA_b)
+    airplane.output(y.MG_b, MG_b)
+    airplane.output(y.MT_b, MT_b)
+    airplane.output(y.MW_b, MW_b)
+    airplane.output(y.M_b, M_b)
 
     # Quaternion output for ROS2 compatibility
     if attitude_rep == 'quat':
-        model.output(y.q, x.r.sym)
+        airplane.output(y.q, x.r.sym)
     else:  # euler
         quat_group = lie.SO3Quat.from_Euler(att)
-        model.output(y.q, quat_group.param)
+        airplane.output(y.q, quat_group.param)
 
     # Dynamics equations
     p_dot = x.v.sym
@@ -517,13 +512,13 @@ def sportcub(attitude_rep: AttitudeRep = 'quat') -> Model:
     w_dot = cy.inv(J) @ (M_b - cy.cross(x.w.sym, J @ x.w.sym))
 
     # Define ODEs
-    model.ode(x.p, p_dot)
-    model.ode(x.v, v_dot)
-    model.ode(x.r, att_dot)
-    model.ode(x.w, w_dot)
+    airplane.ode(x.p, p_dot)
+    airplane.ode(x.v, v_dot)
+    airplane.ode(x.r, att_dot)
+    airplane.ode(x.w, w_dot)
 
-    model.build(integrator='rk4', integrator_options={'N': 100})
-    return model
+    airplane.build(integrator='rk4', integrator_options={'N': 100})
+    return airplane
 
 
 __all__ = [

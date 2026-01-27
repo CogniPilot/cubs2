@@ -48,6 +48,9 @@ class SimNode(Node):
         self.declare_parameter('dt', 0.01)
         self.dt = float(self.get_parameter('dt').value)
 
+        # Toggle Auto or Manual Input
+        self.declare_parameter('outerloop_mode', 'manual')
+
         # Toggle force/moment visualization
         self.declare_parameter('show_forces', True)
         self.show_forces = bool(self.get_parameter('show_forces').value)
@@ -97,32 +100,37 @@ class SimNode(Node):
         # Initialize model
         self.get_logger().info('Initializing sportcub model with autolevel controller')
         self.aircraft = sportcub()
-        self.controller = autolevel_controller()
         self.model = self.aircraft
 
         self.y = self.model.y_current  # computed at end of each step
-
-        # Initialize controller state variables
-        # Controller states: i_p (roll rate integral), i_q (pitch rate integral)
-        self.controller.v0.i_p = 0.0
-        self.controller.v0.i_q = 0.0
 
         # Controller mode: 0 = manual, 1 = stabilized
         self.controller_mode = 0
         
         # Manual control inputs (from gamepad/joystick)
-        self.manual_ail = 0.0
-        self.manual_elev = 0.0
-        self.manual_rud = 0.0
-        self.manual_thr = 0.0
+        self.joy_ail = 0.0
+        self.joy_elev = 0.0
+        self.joy_rud = 0.0
+        self.joy_thr = 0.0
+
+        # Auto mode inputs
+        self.auto_ail = 0.0
+        self.auto_elev = 0.0
+        self.auto_rud = 0.0
+        self.auto_thr = 0.0
 
         # Apply initial state (position, orientation, and control inputs)
         self.apply_initial_state()
 
         # Subscribe to control messages (published by virtual joystick,
         # gamepad, keyboard)
-        self.control_subscription = self.create_subscription(
-            AircraftControl, '/control', self.control_callback, 10
+        # Location where raw inputs are recieved and simulated
+        self.joy_control_subscription = self.create_subscription(
+            AircraftControl, '/control_joy', self.joy_control_callback, 10
+        )
+
+        self.auto_control_subscription = self.create_subscription(
+            AircraftControl, '/control_auto', self.auto_control_callback, 10
         )
 
         # Joint state publisher for control surface and propeller animation
@@ -141,15 +149,7 @@ class SimNode(Node):
         self.sim_time += self.dt
 
         # Simulate aircraft with controller one step forward
-        try:
-            # Step controller to update its state (integral terms)
-            self.controller.simulate(
-                t0=self.sim_time - self.dt,
-                tf=self.sim_time,
-                dt=self.dt,
-                u_func=self._get_controller_inputs,
-            )
-            
+        try:            
             # Step aircraft dynamics
             self.aircraft.simulate(
                 t0=self.sim_time - self.dt,
@@ -173,84 +173,42 @@ class SimNode(Node):
 
         self.publish_state()
 
-    def _get_controller_inputs(self, t, model):
-        """
-        Get controller inputs from current aircraft state.
-        
-        Provides quaternion, angular velocity, velocity, manual inputs, and mode to the controller.
-
-        Returns
-        -------
-        casadi.vertcat
-            Controller inputs: [q0, q1, q2, q3, p, q, r, vx, vy, vz, ail_manual, elev_manual, rud_manual, thr_manual, mode]
-        """
-        # Get current aircraft state
-        q = self.aircraft.y_current.q  # Quaternion (output)
-        omega = self.aircraft.v0.w  # Angular velocity (body frame state)
-        vel = self.aircraft.v0.v  # Velocity (ENU frame state)
-        
-        return ca.vertcat(
-            q[0], q[1], q[2], q[3],  # Quaternion (4)
-            omega[0], omega[1], omega[2],  # Angular velocity (3)
-            vel[0], vel[1], vel[2],  # Velocity (3)
-            self.manual_ail,  # Manual aileron
-            self.manual_elev,  # Manual elevator
-            self.manual_rud,  # Manual rudder
-            self.manual_thr,  # Manual throttle
-            float(self.controller_mode)  # Flight mode
-        )
-
     def _get_control_inputs(self, t, model):
         """
         Get control inputs for the aircraft model.
         
         Runs the autolevel controller with current aircraft state and manual inputs,
         returns 4 control outputs: ail, elev, rud, thr
-
-        Returns
-        -------
-        casadi.vertcat
-            4 control inputs: [aileron, elevator, rudder, throttle]
         """
-        # Update controller inputs with current aircraft state
-        self.controller.u0.q = self.aircraft.y_current.q
-        self.controller.u0.omega = self.aircraft.v0.w  # Angular velocity from state
-        self.controller.u0.vel = self.aircraft.v0.v  # Velocity ENU
-        
-        # Manual control inputs to controller
-        self.controller.u0.ail_manual = self.manual_ail
-        self.controller.u0.elev_manual = self.manual_elev
-        self.controller.u0.rud_manual = self.manual_rud
-        self.controller.u0.thr_manual = self.manual_thr
-        
-        # Flight mode (0 = manual, 1 = stabilized)
-        self.controller.u0.mode = float(self.controller_mode)
-        
-        # Get controller outputs (blended based on mode)
-        ail_out = self.controller.y_current.ail
-        elev_out = self.controller.y_current.elev
-        rud_out = self.controller.y_current.rud
-        thr_out = self.controller.y_current.thr
-        
-        # Update aircraft model inputs with controller outputs
-        self.aircraft.v0.ail = ail_out
-        self.aircraft.v0.elev = elev_out
-        self.aircraft.v0.rud = rud_out
-        self.aircraft.v0.thr = thr_out
-        
-        return ca.vertcat(ail_out, elev_out, rud_out, thr_out)
+        if self.get_parameter('outerloop_mode').value == 'auto':
+            # Use auto control inputs directly
+            return ca.vertcat(self.auto_ail, self.auto_elev,
+                              self.auto_rud, self.auto_thr)
+        else:
+            return ca.vertcat(self.joy_ail, self.joy_elev, 
+                              self.joy_rud, self.joy_thr)
 
     @beartype
-    @beartype
-    def control_callback(self, msg: AircraftControl) -> None:
+    def joy_control_callback(self, msg: AircraftControl) -> None:
         """Handle AircraftControl messages."""
         # Store manual control inputs
-        self.manual_ail = float(msg.aileron)
-        self.manual_elev = float(msg.elevator)
-        self.manual_thr = float(msg.throttle)
-        self.manual_rud = float(msg.rudder)
+        self.joy_ail = float(msg.aileron)
+        self.joy_elev = float(msg.elevator)
+        self.joy_thr = float(msg.throttle)
+        self.joy_rud = float(msg.rudder)
         
         # Extract flight mode (0 = manual, 1 = stabilized)
+        self.controller_mode = int(msg.mode)
+
+    @beartype
+    def auto_control_callback(self, msg: AircraftControl) -> None:
+        """Handle AircraftControl messages for auto mode."""
+        # Store auto control inputs
+        self.auto_ail = float(msg.aileron)
+        self.auto_elev = float(msg.elevator)
+        self.auto_thr = float(msg.throttle)
+        self.auto_rud = float(msg.rudder)
+
         self.controller_mode = int(msg.mode)
 
     @beartype

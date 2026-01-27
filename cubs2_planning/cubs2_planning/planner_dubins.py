@@ -124,8 +124,6 @@ class DubinsGatePlannerNode(Node):
         # Euclidean distance
         self.dist = np.linalg.norm(np.array([ax-bx, ay-by, az-bz]))
 
-        self.get_logger().info(f"Distance({self.frame_ref}, {self.frame_true}) = {self.dist:.3f} m")
-
 
     def plan_trajectory(self):
         R = self.get_parameter('turn_radius').value
@@ -141,9 +139,6 @@ class DubinsGatePlannerNode(Node):
             self.get_logger().error(f'Invalid gate index in sequence: {e}')
             self.get_logger().error(f'Available gates: 0-{len(all_gates) - 1}')
             return []
-
-        # self.get_logger().info(f"gate sequence: {
-        #     ' → '.join([g.name for g in ordered_gates])}")
 
         segments = []
 
@@ -186,28 +181,14 @@ class DubinsGatePlannerNode(Node):
                 }
             )
 
-
-
-            self.get_logger().debug(
-                f'{g0.name} → {g1.name}: type={DubinsPathType.name(ptype)}, cost={
-                    float(cost):.2f}'
-            )
-
-        ## My Code
-        # ...
+            # self.get_logger().debug(
+            #     f'{g0.name} → {g1.name}: type={DubinsPathType.name(ptype)}, cost={
+            #         float(cost):.2f}'
+            # )
 
         waypoints = []
         for i, gate in enumerate(ordered_gates):
             waypoints.append({'pos': gate.center, 'yaw': gate.yaw, 'name': f'WP{i}'})
-
-        # waypoints = [
-        #         {'pos': [0, 0], 'yaw': np.pi/4, 'name': 'Start'},
-        #         {'pos': [20, 20], 'yaw': np.pi/2, 'name': 'WP 1'},
-        #         {'pos': [-20, 20], 'yaw': -np.pi/2, 'name': 'WP 2'},
-        #         {'pos': [20, -20], 'yaw': -np.pi/2, 'name': 'WP 3'},
-        #         {'pos': [-20, -20], 'yaw': np.pi/2, 'name': 'WP 4'},
-        #         {'pos': [0, 0], 'yaw': np.pi/4, 'name': 'End'}
-        #     ]
 
         turn_radius = R
         num_points_per_segment = n
@@ -339,7 +320,6 @@ class DubinsGatePlannerNode(Node):
             next_segment = segment_direction[i+1]
 
             value = None
-            print(current_segment, next_segment)
             match current_segment:
                 case 'R':
                     if next_segment == 'R':
@@ -475,20 +455,17 @@ class DubinsGatePlannerNode(Node):
         for i, bank_angle in enumerate(bank_angles):
             self.trajectory_points[i]['bank'] = bank_angle
 
-        # print(self.trajectory_points[:])#['bank'] = 
         self.total_trajectory_time = self.trajectory_points[-1]['time']
-        self.get_logger().info(
-            f'trajectory: {cumulative_length:.2f}m, {
-                self.total_trajectory_time:.2f}s @ {velocity:.2f}m/s'
-        )
+        # self.get_logger().info(
+        #     f'trajectory: {cumulative_length:.2f}m, {
+        #         self.total_trajectory_time:.2f}s @ {velocity:.2f}m/s'
+        # )
 
     def publish_reference_tf(self):
         """Publish TF frame at current reference position based on elapsed time."""
         if not self.trajectory_points:
             return
         
-        print("What is happening", self.dist)
-
         current_time = self.get_clock().now()
         if self.dist < self.get_parameter('max_distance').value:
             dt = (current_time - self.previous_time).nanoseconds

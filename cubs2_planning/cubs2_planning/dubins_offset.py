@@ -292,8 +292,6 @@ def apply_polynomial_offset_to_dubins(dubins_path, polynomial_coeffs, tau_durati
     
     arc_lengths = np.array(arc_lengths)
     normalized_arc = arc_lengths
-
-    print(normalized_arc)
     
     # Convert polynomial segment durations to arc length boundaries
     seg1_end = tau_durations[0]
@@ -454,16 +452,16 @@ if __name__ == '__main__':
         segment_direction.append('S')
         segment_direction.append('L' if path_type[2] == 'L' else 'R')
         
-        print(f"\n{'='*70}")
-        print(f"Segment {i+1}: {wp_start['name']} → {wp_end['name']}")
-        print(f"{'='*70}")
-        print(f"Path Type: {path_type}")
-        print(f"  Arc 1 (θ={a1_deg:7.2f}°, R={turn_radius:.1f}m):  {L1:8.4f} m")
-        print(f"  Straight (distance):         {L2:8.4f} m")
-        print(f"  Arc 2 (θ={a2_deg:7.2f}°, R={turn_radius:.1f}m):  {L3:8.4f} m")
-        print(f"  {'─'*47}")
-        print(f"  Total Length (computed):     {total_seg_length:8.4f} m")
-        print(f"  Cost (scaled):               {plan['cost']:8.4f}")
+        # print(f"\n{'='*70}")
+        # print(f"Segment {i+1}: {wp_start['name']} → {wp_end['name']}")
+        # print(f"{'='*70}")
+        # print(f"Path Type: {path_type}")
+        # print(f"  Arc 1 (θ={a1_deg:7.2f}°, R={turn_radius:.1f}m):  {L1:8.4f} m")
+        # print(f"  Straight (distance):         {L2:8.4f} m")
+        # print(f"  Arc 2 (θ={a2_deg:7.2f}°, R={turn_radius:.1f}m):  {L3:8.4f} m")
+        # print(f"  {'─'*47}")
+        # print(f"  Total Length (computed):     {total_seg_length:8.4f} m")
+        # print(f"  Cost (scaled):               {plan['cost']:8.4f}")
 
     # Combine all segments into one continuous path
     full_path = np.vstack(dubins_paths)
@@ -578,7 +576,6 @@ if __name__ == '__main__':
         next_segment = segment_direction[i+1]
 
         value = None
-        print(current_segment, next_segment)
         match current_segment:
             case 'R':
                 if next_segment == 'R':
@@ -603,7 +600,6 @@ if __name__ == '__main__':
                     value = 0
             case _:
                 assert -1 > 0
-        print(value)
         if value != 0:
             continuity_changes.append([2 + i*5, value])  # Default to 0
         i += 1

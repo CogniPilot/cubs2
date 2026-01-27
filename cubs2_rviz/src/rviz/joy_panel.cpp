@@ -280,12 +280,12 @@ JoyPanel::JoyPanel(QWidget * parent)
 
   // Create ROS2 node and publishers
   node_ = std::make_shared<rclcpp::Node>("joy_panel");
-  joy_publisher_ = node_->create_publisher<cubs2_msgs::msg::AircraftControl>("/control", 10);
+  joy_publisher_ = node_->create_publisher<cubs2_msgs::msg::AircraftControl>("/control_joy", 10);
   mode_publisher_ = node_->create_publisher<std_msgs::msg::Float32>("/control_mode", 10);
 
   // Create subscribers to monitor external control (e.g., from gamepad)
   joy_subscriber_ = node_->create_subscription<cubs2_msgs::msg::AircraftControl>(
-      "/control", 10,
+      "/control_joy", 10,
     [this](const cubs2_msgs::msg::AircraftControl::SharedPtr msg) {controlCallback(msg);});
 
   // Create timer for publishing control inputs at 20 Hz

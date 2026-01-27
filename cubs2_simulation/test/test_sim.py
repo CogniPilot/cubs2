@@ -112,7 +112,7 @@ class TestSimNode:
         msg.throttle = 0.7
 
         # Call callback
-        node.control_callback(msg)
+        node.joy_control_callback(msg)
 
         # Verify inputs were updated
         assert np.isclose(node.model.u0.ail, 0.5)

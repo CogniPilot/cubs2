@@ -142,7 +142,7 @@ class GamepadControlNode(Node):
 
         # Publishers
         self.pub_control = self.create_publisher(
-            AircraftControl, '/control', 10)
+            AircraftControl, '/control_joy', 10)
         self.pub_reset = self.create_publisher(Empty, '/reset', 10)
         self.pub_pause = self.create_publisher(Empty, '/pause', 10)
 
@@ -162,7 +162,7 @@ class GamepadControlNode(Node):
         # Subscribe to external control messages (from RViz dropdown, etc.)
         # to sync mode changes from other sources
         self.sub_control = self.create_subscription(
-            AircraftControl, '/control', self.control_callback, 10)
+            AircraftControl, '/control_joy', self.control_callback, 10)
 
         # Current state
         self.aileron = 0.0
