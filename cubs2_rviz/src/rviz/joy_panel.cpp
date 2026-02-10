@@ -24,7 +24,7 @@ namespace cubs2
 
 // ============================================================================
 // Joy Panel - Virtual Joystick Control
-// Publishes AircraftControl messages to /control topic
+// Publishes AircraftControl messages to /control_joy topic
 // ============================================================================
 
 // ============================================================================

@@ -17,6 +17,9 @@ from cyecca.planning.dubins import DubinsPathType
 from geometry_msgs.msg import Point
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import Twist
+
 from nav_msgs.msg import Path
 import numpy as np
 from racecourse_description.factory import MarkerFactory
@@ -30,7 +33,8 @@ from dubins_offset import plan_dubins_path, evaluate_dubins_path, compute_curvat
 from polynomial_optimization import run_poly_optimization
 from tf2_ros import Buffer, TransformListener, LookupException
 
-
+from cyecca.lie import SE3Quat
+import casadi as ca
 
 class DubinsGatePlannerNode(Node):
     def __init__(self):
@@ -54,7 +58,7 @@ class DubinsGatePlannerNode(Node):
         self.declare_parameter('planner.velocity', 5.0)
         self.declare_parameter('reference_frame_id',
                                'reference')  # TF frame name
-        self.declare_parameter('max_distance', 10)
+        self.declare_parameter('max_distance', 3)
 
         self.marker_pub = self.create_publisher(
             MarkerArray, 'dubins_trajectory', 10)
@@ -97,9 +101,16 @@ class DubinsGatePlannerNode(Node):
         self.frame_ref = self.get_parameter('reference_frame_id').value
         self.frame_true = 'vehicle'
 
+        # Publish Pose for reference
+        self.pose_pub = self.create_publisher(PoseWithCovarianceStamped, 'reference_pose', 10)
+        self.relative_pose_position = np.array([0.0, 0.0, 0.0])
+
+
         # Timer — check at 30 Hz
         self.timer = self.create_timer(1.0/100.0, self.update_distance)
         self.dist = 0
+
+        self.speed_pub = self.create_publisher(Twist, 'reference_speed', 10)
 
     def update_distance(self):
         try:
@@ -120,6 +131,16 @@ class DubinsGatePlannerNode(Node):
         bx = tf_true.transform.translation.x
         by = tf_true.transform.translation.y
         bz = tf_true.transform.translation.z
+
+        ref = SE3Quat.elem(ca.DM(np.array([ax, ay, az, tf_ref.transform.rotation.w, tf_ref.transform.rotation.x, tf_ref.transform.rotation.y, tf_ref.transform.rotation.z])))
+        true = SE3Quat.elem(ca.DM(np.array([bx, by, bz, tf_ref.transform.rotation.w, tf_true.transform.rotation.x, tf_true.transform.rotation.y, tf_true.transform.rotation.z])))
+
+        # Put true state in ref frame   
+        true_in_ref = SE3Quat.product(ref.inverse(), true)
+        true_in_ref_pos = true_in_ref.param[:3]
+        true_in_ref_pos = np.array(ca.DM(true_in_ref_pos)).flatten()
+
+        self.relative_pose_position = true_in_ref_pos 
 
         # Euclidean distance
         self.dist = np.linalg.norm(np.array([ax-bx, ay-by, az-bz]))
@@ -467,9 +488,17 @@ class DubinsGatePlannerNode(Node):
             return
         
         current_time = self.get_clock().now()
-        if self.dist < self.get_parameter('max_distance').value:
+
+        Kspeedup = 10
+        if self.relative_pose_position[0] > 0:
+            # if self.dist > self.get_parameter('max_distance').value:
             dt = (current_time - self.previous_time).nanoseconds
-            self.elapsed_time += dt
+            self.elapsed_time += (abs(self.relative_pose_position[0])/Kspeedup+1) * dt
+        else:
+            # behind
+            if self.dist < self.get_parameter('max_distance').value:
+                dt = (current_time - self.previous_time).nanoseconds
+                self.elapsed_time += dt
             
         self.previous_time = current_time
 
@@ -501,6 +530,9 @@ class DubinsGatePlannerNode(Node):
         pitch = 0.0
         yaw = ref_point['psi']
 
+        ref_speed = self.get_parameter('planner.velocity').value
+
+
         q = quaternion_from_euler(roll, pitch, yaw)
         t.transform.rotation.x = q[0]
         t.transform.rotation.y = q[1]
@@ -508,6 +540,30 @@ class DubinsGatePlannerNode(Node):
         t.transform.rotation.w = q[3]
 
         self.tf_broadcaster.sendTransform(t)
+
+        pose = PoseWithCovarianceStamped()
+        pose.header = t.header
+        pose.pose.pose.position.x = ref_point['pos'][0]
+        pose.pose.pose.position.y = ref_point['pos'][1]
+        pose.pose.pose.position.z = ref_point['pos'][2]
+        pose.pose.pose.orientation.x = q[0]
+        pose.pose.pose.orientation.y = q[1]
+        pose.pose.pose.orientation.z = q[2]
+        pose.pose.pose.orientation.w = q[3]
+
+        max_dist = self.get_parameter('max_distance').value
+        pose.pose.covariance = [max_dist**2, 0, 0, 0, 0, 0,
+                                0, max_dist**2, 0, 0, 0, 0,
+                                0, 0, max_dist**2, 0, 0, 0,
+                                0, 0, 0, 0.1, 0, 0,
+                                0, 0, 0, 0, 0.1, 0,
+                                0, 0, 0, 0, 0, 0.1]
+
+        self.pose_pub.publish(pose)
+
+        speed = Twist()
+        speed.linear.x = ref_speed
+        self.speed_pub.publish(speed)
 
     def _interpolate_trajectory(self, time):
         """Interpolate trajectory point at given time."""
