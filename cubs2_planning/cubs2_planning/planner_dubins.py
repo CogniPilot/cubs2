@@ -137,13 +137,29 @@ class DubinsGatePlannerNode(Node):
 
         # Put true state in ref frame   
         true_in_ref = SE3Quat.product(ref.inverse(), true)
-        true_in_ref_pos = true_in_ref.param[:3]
+        true_in_ref_pos = true_in_ref.param
         true_in_ref_pos = np.array(ca.DM(true_in_ref_pos)).flatten()
 
-        self.relative_pose_position = true_in_ref_pos 
+        self.relative_pose_position = true_in_ref_pos[:3] 
 
         # Euclidean distance
         self.dist = np.linalg.norm(np.array([ax-bx, ay-by, az-bz]))
+
+
+        trel = TransformStamped()
+        current_time = self.get_clock().now()
+        trel.header.stamp = current_time.to_msg()
+        trel.header.frame_id = self.get_parameter('reference_frame_id').value
+        trel.child_frame_id = 'error_relative_to_reference'
+        trel.transform.translation.x = true_in_ref_pos[0]
+        trel.transform.translation.y = true_in_ref_pos[1]
+        trel.transform.translation.z = true_in_ref_pos[2]
+        trel.transform.rotation.w = true_in_ref_pos[3]
+        trel.transform.rotation.x = true_in_ref_pos[4]
+        trel.transform.rotation.y = true_in_ref_pos[5]
+        trel.transform.rotation.z = true_in_ref_pos[6]
+
+        self.tf_broadcaster.sendTransform(trel)
 
 
     def plan_trajectory(self):
@@ -564,6 +580,9 @@ class DubinsGatePlannerNode(Node):
         speed = Twist()
         speed.linear.x = ref_speed
         self.speed_pub.publish(speed)
+
+
+        
 
     def _interpolate_trajectory(self, time):
         """Interpolate trajectory point at given time."""
