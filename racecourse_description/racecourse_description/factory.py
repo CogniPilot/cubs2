@@ -59,7 +59,7 @@ class MarkerFactory:
         m = Marker()
         m.header.frame_id = self.frame_id
         m.id = marker_id
-        m.ns = 'racecourse'
+        m.ns = "racecourse"
         m.type = Marker.MESH_RESOURCE
         m.action = Marker.ADD
         m.lifetime = Duration(sec=0)
@@ -108,7 +108,7 @@ class MarkerFactory:
         m = Marker()
         m.header.frame_id = self.frame_id
         m.id = marker_id
-        m.ns = 'gate_direction'
+        m.ns = "gate_direction"
         m.type = Marker.ARROW
         m.action = Marker.ADD
         m.lifetime = Duration(sec=0)
@@ -130,13 +130,8 @@ class MarkerFactory:
         return m
 
     def line_strip(
-            self,
-            marker_id,
-            points,
-            stamp=None,
-            ns='line_strip',
-            line_width=0.1,
-            color=None):
+        self, marker_id, points, stamp=None, ns="line_strip", line_width=0.1, color=None
+    ):
         """
         Create a LINE_STRIP marker from a list of points.
 
@@ -173,8 +168,9 @@ class MarkerFactory:
         if points and isinstance(points[0], Point):
             m.points = points
         else:
-            m.points = [Point(x=float(p[0]), y=float(
-                p[1]), z=float(p[2])) for p in points]
+            m.points = [
+                Point(x=float(p[0]), y=float(p[1]), z=float(p[2])) for p in points
+            ]
 
         return m
 
@@ -184,7 +180,7 @@ class MarkerFactory:
         position,
         heading,
         stamp=None,
-        ns='arrow',
+        ns="arrow",
         length=1.0,
         width=0.15,
         color=None,
@@ -237,7 +233,7 @@ class MarkerFactory:
         radius,
         z=0.0,
         stamp=None,
-        ns='circle',
+        ns="circle",
         line_width=0.1,
         color=None,
         num_points=51,
@@ -269,8 +265,9 @@ class MarkerFactory:
         """
         angles = np.linspace(0, 2 * np.pi, num_points)
         points = [
-            Point(x=center[0] + radius * np.cos(a),
-                  y=center[1] + radius * np.sin(a), z=z)
+            Point(
+                x=center[0] + radius * np.cos(a), y=center[1] + radius * np.sin(a), z=z
+            )
             for a in angles
         ]
 
@@ -278,9 +275,5 @@ class MarkerFactory:
             color = self.color(0.5, 0.5, 0.5, 1.0)
 
         return self.line_strip(
-            marker_id,
-            points,
-            stamp=stamp,
-            ns=ns,
-            line_width=line_width,
-            color=color)
+            marker_id, points, stamp=stamp, ns=ns, line_width=line_width, color=color
+        )

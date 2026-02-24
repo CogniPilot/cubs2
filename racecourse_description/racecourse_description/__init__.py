@@ -19,8 +19,8 @@ from .factory import MarkerFactory
 from .loader import RacecourseLoader
 
 __all__ = [
-    'RacecourseLoader',
-    'MarkerFactory',
-    'GenericModel',
-    'Gate',
+    "RacecourseLoader",
+    "MarkerFactory",
+    "GenericModel",
+    "Gate",
 ]

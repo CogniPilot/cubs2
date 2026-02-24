@@ -37,11 +37,11 @@ class TestSimNode:
         node = SimNode()
 
         # Verify node name
-        assert node.get_name() == 'sim_node'
+        assert node.get_name() == "sim_node"
 
         # Verify parameters were declared
-        assert node.has_parameter('dt')
-        assert node.has_parameter('show_forces')
+        assert node.has_parameter("dt")
+        assert node.has_parameter("show_forces")
 
         # Verify default values
         assert node.dt == 0.01  # Default 10ms
@@ -52,10 +52,10 @@ class TestSimNode:
         assert not node.paused
 
         # Verify model is initialized (composed closed-loop model)
-        assert hasattr(node, 'model')
-        assert hasattr(node.model, 'x0')
-        assert hasattr(node.model, 'u0')
-        assert hasattr(node.model, 'p0')
+        assert hasattr(node, "model")
+        assert hasattr(node.model, "x0")
+        assert hasattr(node.model, "u0")
+        assert hasattr(node.model, "p0")
 
         # Verify initial position for takeoff (CG at 0.1m so wheels touch
         # ground)
@@ -70,8 +70,8 @@ class TestSimNode:
         node = SimNode()
 
         # Verify we can get parameter values
-        dt_value = node.get_parameter('dt').value
-        show_forces_value = node.get_parameter('show_forces').value
+        dt_value = node.get_parameter("dt").value
+        show_forces_value = node.get_parameter("show_forces").value
 
         # Verify default values (set in __init__)
         assert dt_value == 0.01
@@ -213,8 +213,8 @@ class TestSimNode:
 
         # Verify inputs were set (publish_state handles joint states internally)
         # Just verify the node has expected attributes
-        assert hasattr(node, 'joint_state_publisher')
-        assert hasattr(node, 'propeller_angle')
+        assert hasattr(node, "joint_state_publisher")
+        assert hasattr(node, "propeller_angle")
 
         # Verify propeller angle is updated
         assert node.propeller_angle >= 0.0
@@ -257,7 +257,7 @@ class TestSimNode:
         node.step_simulation()
 
         # Verify propeller angle exists
-        assert hasattr(node, 'propeller_angle')
+        assert hasattr(node, "propeller_angle")
 
         # Angle should have increased with full throttle
         if node.model.u0.thr > 0:
@@ -294,16 +294,16 @@ class TestSimNode:
         node.step_simulation()
 
         # Verify outputs can be computed
-        if hasattr(node.model, 'y_current'):
+        if hasattr(node.model, "y_current"):
             y = node.model.y_current
             assert y is not None
             # Outputs is an object (not dict) with force attributes
-            assert hasattr(y, 'FA_b')  # Aero force
-            assert hasattr(y, 'FT_b')  # Thrust force
-            assert hasattr(y, 'FW_b')  # Weight force
+            assert hasattr(y, "FA_b")  # Aero force
+            assert hasattr(y, "FT_b")  # Thrust force
+            assert hasattr(y, "FW_b")  # Weight force
 
         node.destroy_node()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

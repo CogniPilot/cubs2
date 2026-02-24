@@ -24,16 +24,16 @@ class TestControllers:
         """Test that autolevel controller can be created."""
         model = autolevel_controller()
         assert model is not None
-        assert model.name == 'AutolevelController'
-        assert 'i_p' in model.state_names
-        assert 'i_q' in model.state_names
+        assert model.name == "AutolevelController"
+        assert "i_p" in model.state_names
+        assert "i_q" in model.state_names
 
     def test_pid_controller_creation(self):
         """Test that PID controller can be created."""
         model = pid_controller()
         assert model is not None
-        assert model.name == 'PIDController'
-        assert 'i_roll' in model.state_names
-        assert 'i_pitch' in model.state_names
-        assert 'i_yaw' in model.state_names
-        assert 'i_speed' in model.state_names
+        assert model.name == "PIDController"
+        assert "i_roll" in model.state_names
+        assert "i_pitch" in model.state_names
+        assert "i_yaw" in model.state_names
+        assert "i_speed" in model.state_names

@@ -20,25 +20,24 @@ import rosbag2_py
 
 # Configuration
 if len(sys.argv) < 2:
-    print('Usage: filter_bag.py <input_bag.mcap>')
+    print("Usage: filter_bag.py <input_bag.mcap>")
     sys.exit(1)
 
 INPUT_BAG = sys.argv[1]
-OUTPUT_BAG = INPUT_BAG.replace('.mcap', '_filtered')
-TOPICS_TO_KEEP = ['/cub1/pose', '/cub1/joy_serial_status']
+OUTPUT_BAG = INPUT_BAG.replace(".mcap", "_filtered")
+TOPICS_TO_KEEP = ["/cub1/pose", "/cub1/joy_serial_status"]
 
 
 def filter_bag():
     """Filter the bag file to only include specified topics."""
     # Remove old output if it exists
     if os.path.exists(OUTPUT_BAG):
-        os.system(f'rm -rf {OUTPUT_BAG}')
+        os.system(f"rm -rf {OUTPUT_BAG}")
 
     # Open input bag for reading
-    storage_options = rosbag2_py.StorageOptions(
-        uri=INPUT_BAG, storage_id='mcap')
+    storage_options = rosbag2_py.StorageOptions(uri=INPUT_BAG, storage_id="mcap")
     converter_options = rosbag2_py.ConverterOptions(
-        input_serialization_format='cdr', output_serialization_format='cdr'
+        input_serialization_format="cdr", output_serialization_format="cdr"
     )
 
     reader = rosbag2_py.SequentialReader()
@@ -50,7 +49,8 @@ def filter_bag():
 
     # Open output bag for writing
     output_storage_options = rosbag2_py.StorageOptions(
-        uri=OUTPUT_BAG, storage_id='mcap')
+        uri=OUTPUT_BAG, storage_id="mcap"
+    )
     writer = rosbag2_py.SequentialWriter()
     writer.open(output_storage_options, converter_options)
 
@@ -62,15 +62,15 @@ def filter_bag():
                 id=topic_id,
                 name=topic_name,
                 type=type_map[topic_name],
-                serialization_format='cdr',
+                serialization_format="cdr",
             )
             writer.create_topic(topic)
             topic_id += 1
 
     # Filter and write messages
     msg_count = 0
-    print(f'Filtering bag: {INPUT_BAG} -> {OUTPUT_BAG}')
-    print(f'Topics to keep: {TOPICS_TO_KEEP}')
+    print(f"Filtering bag: {INPUT_BAG} -> {OUTPUT_BAG}")
+    print(f"Topics to keep: {TOPICS_TO_KEEP}")
 
     while reader.has_next():
         (topic, data, timestamp) = reader.read_next()
@@ -79,16 +79,15 @@ def filter_bag():
             writer.write(topic, data, timestamp)
             msg_count += 1
             if msg_count % 1000 == 0:
-                print(f'  Processed {msg_count} messages...')
+                print(f"  Processed {msg_count} messages...")
 
-    print(f'\nComplete! Wrote {msg_count} messages to {OUTPUT_BAG}')
+    print(f"\nComplete! Wrote {msg_count} messages to {OUTPUT_BAG}")
 
     # Check output size
-    if os.path.exists(f'{OUTPUT_BAG}/{OUTPUT_BAG}_0.mcap'):
-        size_mb = os.path.getsize(
-            f'{OUTPUT_BAG}/{OUTPUT_BAG}_0.mcap') / (1024 * 1024)
-        print(f'Output size: {size_mb:.2f} MB')
+    if os.path.exists(f"{OUTPUT_BAG}/{OUTPUT_BAG}_0.mcap"):
+        size_mb = os.path.getsize(f"{OUTPUT_BAG}/{OUTPUT_BAG}_0.mcap") / (1024 * 1024)
+        print(f"Output size: {size_mb:.2f} MB")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     filter_bag()

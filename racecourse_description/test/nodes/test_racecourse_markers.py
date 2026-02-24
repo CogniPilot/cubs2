@@ -53,7 +53,7 @@ gates:
     width: 5.0
 """
     # Create temporary file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(yaml_content)
         temp_path = f.name
 
@@ -76,10 +76,10 @@ class TestRacecourseNode:
         # Get the package root directory (test is in test/nodes/)
         test_dir = pathlib.Path(__file__).parent
         package_root = test_dir.parent.parent
-        yaml_path = package_root / 'config' / 'racecourse.yaml'
+        yaml_path = package_root / "config" / "racecourse.yaml"
 
         # Verify the file exists
-        assert yaml_path.exists(), f'racecourse.yaml not found at {yaml_path}'
+        assert yaml_path.exists(), f"racecourse.yaml not found at {yaml_path}"
 
         # Change to package root so the default 'racecourse.yaml' can be resolved
         # by creating a symlink in the current directory
@@ -88,7 +88,7 @@ class TestRacecourseNode:
             os.chdir(package_root)
 
             # Create a temporary symlink to the actual file
-            symlink_path = package_root / 'racecourse.yaml'
+            symlink_path = package_root / "racecourse.yaml"
             # Remove existing file/symlink if present
             if symlink_path.exists() or symlink_path.is_symlink():
                 symlink_path.unlink()
@@ -99,7 +99,7 @@ class TestRacecourseNode:
                 node = RacecourseNode()
 
                 # Verify node was created correctly
-                assert node.get_name() == 'racecourse_markers_pub'
+                assert node.get_name() == "racecourse_markers_pub"
                 assert node.loader is not None
                 assert node.factory is not None
 
@@ -117,7 +117,7 @@ class TestRacecourseNode:
         with pytest.raises(FileNotFoundError):
             node = RacecourseNode()
             # Force parameter to non-existent file
-            node.declare_parameter('course_yaml', '/nonexistent/file.yaml')
+            node.declare_parameter("course_yaml", "/nonexistent/file.yaml")
             # Try to access the parameter (would trigger load in __init__)
             # In actual __init__, this would fail during loader creation
             # For this test, we verify the exception is raised
@@ -131,14 +131,13 @@ class TestRacecourseNode:
         loader = RacecourseLoader(temp_racecourse_yaml)
 
         # Verify loader loaded the data
-        assert hasattr(loader, 'frame_id')
-        assert loader.frame_id == 'map'
-        assert hasattr(loader, 'gates')
+        assert hasattr(loader, "frame_id")
+        assert loader.frame_id == "map"
+        assert hasattr(loader, "gates")
         assert len(loader.gates) > 0
-        assert hasattr(loader, 'generic')
+        assert hasattr(loader, "generic")
 
-    def test_marker_factory_initialization(
-            self, ros_context, temp_racecourse_yaml):
+    def test_marker_factory_initialization(self, ros_context, temp_racecourse_yaml):
         """Test that MarkerFactory is initialized correctly."""
         from racecourse_description import MarkerFactory
         from racecourse_description import RacecourseLoader
@@ -190,14 +189,14 @@ class TestRacecourseNode:
         from rclpy.node import Node
 
         # Create a simple node to test parameter declaration
-        node = Node('test_node')
-        node.declare_parameter('course_yaml', 'test.yaml')
+        node = Node("test_node")
+        node.declare_parameter("course_yaml", "test.yaml")
 
-        param_value = node.get_parameter('course_yaml').value
-        assert param_value == 'test.yaml'
+        param_value = node.get_parameter("course_yaml").value
+        assert param_value == "test.yaml"
 
         node.destroy_node()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
