@@ -23,26 +23,26 @@ from visualization_msgs.msg import MarkerArray
 
 class RacecourseNode(Node):
     def __init__(self):
-        super().__init__('racecourse_markers_pub')
-        self.get_logger().info('Racecourse Markers Publisher Node starting...')
+        super().__init__("racecourse_markers_pub")
+        self.get_logger().info("Racecourse Markers Publisher Node starting...")
 
         # Load course YAML path as parameter
-        self.declare_parameter('course_yaml', 'racecourse.yaml')
-        yaml_path = self.get_parameter('course_yaml').value
+        self.declare_parameter("course_yaml", "racecourse.yaml")
+        yaml_path = self.get_parameter("course_yaml").value
 
         # Validate file path
         if not os.path.exists(yaml_path):
-            self.get_logger().error(f'Racecourse YAML not found: {yaml_path}')
-            raise FileNotFoundError(f'Racecourse YAML not found: {yaml_path}')
+            self.get_logger().error(f"Racecourse YAML not found: {yaml_path}")
+            raise FileNotFoundError(f"Racecourse YAML not found: {yaml_path}")
 
-        self.get_logger().info(f'Loading racecourse from: {yaml_path}')
+        self.get_logger().info(f"Loading racecourse from: {yaml_path}")
 
         # Load course data + prepare marker factory
         self.loader = RacecourseLoader(yaml_path)
         self.factory = MarkerFactory(self.loader.frame_id)
 
         # Publisher + timer
-        self.pub = self.create_publisher(MarkerArray, 'racecourse_markers', 10)
+        self.pub = self.create_publisher(MarkerArray, "racecourse_markers", 10)
         self.timer = self.create_timer(0.2, self.publish)
 
     def publish(self):
@@ -86,5 +86,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

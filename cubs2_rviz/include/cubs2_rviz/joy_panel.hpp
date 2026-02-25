@@ -25,6 +25,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/panel.hpp>
 #include <std_msgs/msg/float32.hpp>
+#include <std_msgs/msg/string.hpp>
 
 namespace cubs2
 {
@@ -109,6 +110,8 @@ private Q_SLOTS:
 
 private:
   void controlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg);
+  void autoControlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg);
+  void outerloopmodeCallback(const std_msgs::msg::String::SharedPtr msg);
   void updateDisplayFromExternal(double aileron, double elevator, double throttle, double rudder);
 
 private:
@@ -142,7 +145,10 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<cubs2_msgs::msg::AircraftControl>::SharedPtr joy_publisher_{nullptr};
   rclcpp::Subscription<cubs2_msgs::msg::AircraftControl>::SharedPtr joy_subscriber_{nullptr};
+  rclcpp::Subscription<cubs2_msgs::msg::AircraftControl>::SharedPtr auto_subscriber_{nullptr};
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr outerloop_mode_subscriber_{nullptr};
   rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr mode_publisher_{nullptr};
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr outerloop_mode_publisher_{nullptr};
 };
 
 }  // namespace cubs2

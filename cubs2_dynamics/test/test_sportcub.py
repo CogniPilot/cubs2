@@ -1,4 +1,5 @@
 """Tests for the sportcub model factory."""
+
 # Copyright 2025 CogniPilot Foundation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,7 +48,7 @@ class TestSportCubNode:
         model.v0.p = np.array([0.0, 0.0, initial_z])
 
         def u_func(t, m):
-            return {'ail': 0, 'elev': 0, 'rud': 0, 'thr': 0}
+            return {"ail": 0, "elev": 0, "rud": 0, "thr": 0}
 
         dt = 0.02
         total_time = 3.0
@@ -66,11 +67,13 @@ class TestSportCubNode:
         settled = bool(settled_mask.any())
 
         v_final = model.v0
-        assert min_z > -0.05, f'Unexpected penetration below ground: min_z={min_z:.3f}'
-        assert max_z <= initial_z + 0.02, f'Bounced above initial height: max_z={max_z:.3f}'
+        assert min_z > -0.05, f"Unexpected penetration below ground: min_z={min_z:.3f}"
+        assert (
+            max_z <= initial_z + 0.02
+        ), f"Bounced above initial height: max_z={max_z:.3f}"
         xy_distance = np.linalg.norm(v_final.p[:2])
-        assert xy_distance < 0.05, f'Aircraft drifted horizontally {xy_distance:.3f} m'
-        assert settled, 'Ground reaction did not settle within allotted simulation time'
+        assert xy_distance < 0.05, f"Aircraft drifted horizontally {xy_distance:.3f} m"
+        assert settled, "Ground reaction did not settle within allotted simulation time"
         assert np.all(np.isfinite(v_final.p))
         assert np.all(np.isfinite(v_final.v))
         q_norm = np.linalg.norm(v_final.r)
@@ -89,7 +92,7 @@ class TestSportCubNode:
             model.v0.p = np.array([0.0, 0.0, h0])
 
             def u_func(t, m):
-                return {'ail': 0, 'elev': 0, 'rud': 0, 'thr': 0}
+                return {"ail": 0, "elev": 0, "rud": 0, "thr": 0}
 
             total_time = dt * max_steps
             t, traj = model.simulate(t0=0.0, tf=total_time, dt=dt, u_func=u_func)
@@ -118,7 +121,8 @@ class TestSportCubNode:
                     if min_z_after_contact is None or z < min_z_after_contact:
                         min_z_after_contact = z
                     bounce_check = (
-                        prev_vz > 0.001 and vz <= 0
+                        prev_vz > 0.001
+                        and vz <= 0
                         and (z - min_z_after_contact) >= bounce_threshold
                     )
                     if bounce_check:
@@ -136,16 +140,19 @@ class TestSportCubNode:
                 rebound_height = 0.0
             e = rebound_height / h0
             max_penetration = max(0.0, -min_z)
-            results.append((h0, rebound_height, e, max_penetration, settling_time, settled))
+            results.append(
+                (h0, rebound_height, e, max_penetration, settling_time, settled)
+            )
 
         for h0, _, e, max_penetration, settling_time, settled in results:
             assert e <= 1.0 + 1e-6
             if h0 >= 1.0:
-                assert e <= 0.55, f'Bounce too energetic for h0={h0}m: e={e:.3f}'
-                assert e >= 0.08, f'Bounce too damped for h0={h0}m: e={e:.3f}'
+                assert e <= 0.55, f"Bounce too energetic for h0={h0}m: e={e:.3f}"
+                assert e >= 0.08, f"Bounce too damped for h0={h0}m: e={e:.3f}"
 
-            assert settled and settling_time is not None and settling_time <= 8.0, \
-                f'Drop {h0} m took too long to settle'
+            assert (
+                settled and settling_time is not None and settling_time <= 8.0
+            ), f"Drop {h0} m took too long to settle"
 
             wheel_offset = 0.1
             wheel_penetration = max_penetration + wheel_offset
@@ -156,8 +163,9 @@ class TestSportCubNode:
                 max_allowed = 0.18
             else:
                 max_allowed = 0.25
-            assert wheel_penetration < max_allowed, \
-                f'Excessive penetration for h0={h0}m: {wheel_penetration:.3f}m'
+            assert (
+                wheel_penetration < max_allowed
+            ), f"Excessive penetration for h0={h0}m: {wheel_penetration:.3f}m"
 
     def test_glide_slope(self):
         """Verify controlled glide with wings-level control optimized for maximum L/D."""
@@ -188,13 +196,17 @@ class TestSportCubNode:
         v_dot_mag = np.linalg.norm(v_dot)
         w_dot_mag = np.linalg.norm(w_dot)
 
-        assert v_dot_mag < 0.01, f'Velocity acceleration not zero: |v_dot|={v_dot_mag:.6f}'
-        assert w_dot_mag < 0.01, f'Angular acceleration not zero: |w_dot|={w_dot_mag:.6f}'
+        assert (
+            v_dot_mag < 0.01
+        ), f"Velocity acceleration not zero: |v_dot|={v_dot_mag:.6f}"
+        assert (
+            w_dot_mag < 0.01
+        ), f"Angular acceleration not zero: |w_dot|={w_dot_mag:.6f}"
 
         # Set up simulation
         model.v0.p = np.array([0.0, 0.0, 100.0])
         for name in model._state_fields:
-            if name != 'p':
+            if name != "p":
                 setattr(model.v0, name, getattr(v_trim, name))
         for name in model._input_fields:
             setattr(model.v0, name, getattr(v_trim, name))
@@ -214,10 +226,12 @@ class TestSportCubNode:
             phi = float(euler.param[2])
             roll_error = -phi
             return {
-                'ail': float(np.clip(base_ail + kp_phi * roll_error - kd_phi * st.w[0], -1, 1)),
-                'elev': float(np.clip(base_elev, -1, 1)),
-                'rud': float(np.clip(base_rud - kd_rud * st.w[2], -1, 1)),
-                'thr': float(np.clip(base_thr, 0, 1)),
+                "ail": float(
+                    np.clip(base_ail + kp_phi * roll_error - kd_phi * st.w[0], -1, 1)
+                ),
+                "elev": float(np.clip(base_elev, -1, 1)),
+                "rud": float(np.clip(base_rud - kd_rud * st.w[2], -1, 1)),
+                "thr": float(np.clip(base_thr, 0, 1)),
             }
 
         x0_pos = model.v0.p.copy()
@@ -225,7 +239,9 @@ class TestSportCubNode:
 
         altitudes = traj.p[:, 2]
         x0_horizontal = np.array([x0_pos[0], x0_pos[1]])
-        horizontal_distances = np.array([np.linalg.norm(p[:2] - x0_horizontal) for p in traj.p])
+        horizontal_distances = np.array(
+            [np.linalg.norm(p[:2] - x0_horizontal) for p in traj.p]
+        )
         airspeeds = np.linalg.norm(traj.v, axis=1)
 
         altitude_lost = float(altitudes[0] - altitudes[-1])
@@ -237,10 +253,11 @@ class TestSportCubNode:
         roll_angles = []
         pitch_angles = []
         for q in traj.r:
-            phi = float(np.arctan2(
-                2 * (q[0] * q[1] + q[2] * q[3]),
-                1 - 2 * (q[1] ** 2 + q[2] ** 2)
-            ))
+            phi = float(
+                np.arctan2(
+                    2 * (q[0] * q[1] + q[2] * q[3]), 1 - 2 * (q[1] ** 2 + q[2] ** 2)
+                )
+            )
             theta = float(np.arcsin(np.clip(2 * (q[0] * q[2] - q[3] * q[1]), -1, 1)))
             roll_angles.append(np.degrees(phi))
             pitch_angles.append(np.degrees(theta))
@@ -249,13 +266,17 @@ class TestSportCubNode:
         airspeed_std = float(np.std(airspeeds))
         pitch_std = float(np.std(pitch_angles))
 
-        assert max_roll < 10.0, f'Roll control failed: max_roll={max_roll:.1f}°'
-        assert airspeed_std < 1.0, f'Airspeed not stable: std={airspeed_std:.2f} m/s'
-        assert pitch_std < 5.0, f'Pitch not stable: std={pitch_std:.2f}°'
-        assert glide_ratio > 5.5, f'Glide ratio too low: {glide_ratio:.2f}:1'
-        assert glide_ratio < 12.0, f'Glide ratio unrealistically high: {glide_ratio:.2f}:1'
-        assert 4.5 < avg_airspeed < 8.0, f'Average airspeed out of band: {avg_airspeed:.2f} m/s'
-        assert min_airspeed > 4.0, f'Minimum airspeed too low: {min_airspeed:.2f} m/s'
+        assert max_roll < 10.0, f"Roll control failed: max_roll={max_roll:.1f}°"
+        assert airspeed_std < 1.0, f"Airspeed not stable: std={airspeed_std:.2f} m/s"
+        assert pitch_std < 5.0, f"Pitch not stable: std={pitch_std:.2f}°"
+        assert glide_ratio > 5.5, f"Glide ratio too low: {glide_ratio:.2f}:1"
+        assert (
+            glide_ratio < 12.0
+        ), f"Glide ratio unrealistically high: {glide_ratio:.2f}:1"
+        assert (
+            4.5 < avg_airspeed < 8.0
+        ), f"Average airspeed out of band: {avg_airspeed:.2f} m/s"
+        assert min_airspeed > 4.0, f"Minimum airspeed too low: {min_airspeed:.2f} m/s"
 
     def test_takeoff_ready_initial_conditions(self):
         """Ensure takeoff-ready setup yields zero wheel penetration and no upward impulse."""
@@ -277,15 +298,17 @@ class TestSportCubNode:
         assert tail_world_z > 0.0
 
         def u_func(t, m):
-            return {'ail': 0, 'elev': 0, 'rud': 0, 'thr': 0}
+            return {"ail": 0, "elev": 0, "rud": 0, "thr": 0}
 
         t, traj = model.simulate(t0=0.0, tf=0.001, dt=0.001, u_func=u_func)
         v_next = model.v0
-        assert v_next.v[2] <= 1e-6, f'Unexpected upward vertical velocity: {v_next.v[2]}'
+        assert (
+            v_next.v[2] <= 1e-6
+        ), f"Unexpected upward vertical velocity: {v_next.v[2]}"
 
     def test_trim_linearize_5ms(self):
         """Trim and linearize at 5 m/s, verify near-zero net forces/moments and mode presence."""
-        model = sportcub(attitude_rep='euler')
+        model = sportcub(attitude_rep="euler")
 
         v_trim, stats = find_trim(
             model,
@@ -319,46 +342,46 @@ class TestSportCubNode:
         out_indices = {}
         for field_name in model._output_fields:
             field_info = model.model_type._field_info[field_name]
-            dim = field_info['dim']
+            dim = field_info["dim"]
             out_indices[field_name] = (out_offset, out_offset + dim)
             out_offset += dim
 
-        F_b_idx = out_indices.get('F_b', (0, 3))
-        M_b_idx = out_indices.get('M_b', (0, 3))
-        F_b = outputs[F_b_idx[0]:F_b_idx[1]]
-        M_b = outputs[M_b_idx[0]:M_b_idx[1]]
+        F_b_idx = out_indices.get("F_b", (0, 3))
+        M_b_idx = out_indices.get("M_b", (0, 3))
+        F_b = outputs[F_b_idx[0] : F_b_idx[1]]
+        M_b = outputs[M_b_idx[0] : M_b_idx[1]]
 
         F_mag = np.linalg.norm(F_b)
         M_mag = np.linalg.norm(M_b)
 
-        assert abs(F_b[2]) < 0.02, f'Vertical force imbalance: {F_b[2]:.4f} N'
-        assert F_mag < 0.05, f'Net force too large: {F_mag:.4f} N'
-        assert M_mag < 0.02, f'Net moment too large: {M_mag:.4f} N·m'
+        assert abs(F_b[2]) < 0.02, f"Vertical force imbalance: {F_b[2]:.4f} N"
+        assert F_mag < 0.05, f"Net force too large: {F_mag:.4f} N"
+        assert M_mag < 0.02, f"Net moment too large: {M_mag:.4f} N·m"
 
         v_z = float(v_trim.v[2])
-        assert abs(v_z) < 0.02, f'Vertical velocity not trimmed: {v_z:.4f} m/s'
+        assert abs(v_z) < 0.02, f"Vertical velocity not trimmed: {v_z:.4f} m/s"
 
-        CL_idx = out_indices.get('CL', (0, 1))
-        CD_idx = out_indices.get('CD', (0, 1))
+        CL_idx = out_indices.get("CL", (0, 1))
+        CD_idx = out_indices.get("CD", (0, 1))
         CL = float(outputs[CL_idx[0]])
         CD = float(outputs[CD_idx[0]])
 
-        assert 0.15 < CL < 0.85, f'CL out of range: {CL:.3f}'
-        assert 0.02 < CD < 0.12, f'CD out of range: {CD:.3f}'
+        assert 0.15 < CL < 0.85, f"CL out of range: {CL:.3f}"
+        assert 0.02 < CD < 0.12, f"CD out of range: {CD:.3f}"
         LD = CL / CD
-        assert 5.0 < LD < 10.0, f'L/D out of range: {LD:.2f}'
+        assert 5.0 < LD < 10.0, f"L/D out of range: {LD:.2f}"
 
-        sp = classified.get('short_period')
-        rd = classified.get('roll_damping')
-        assert sp is not None and sp['real'] < 0.0, 'Short period should be stable'
-        assert rd is not None and rd['real'] < 0.0, 'Roll damping should be stable'
+        sp = classified.get("short_period")
+        rd = classified.get("roll_damping")
+        assert sp is not None and sp["real"] < 0.0, "Short period should be stable"
+        assert rd is not None and rd["real"] < 0.0, "Roll damping should be stable"
 
         if sp is not None:
-            assert sp['zeta'] > 0.3, f"Short period under-damped: ζ={sp['zeta']:.3f}"
+            assert sp["zeta"] > 0.3, f"Short period under-damped: ζ={sp['zeta']:.3f}"
 
     def test_euler_linearization_5ms(self):
         """Verify Euler angle representation works for linearization and trim at 5 m/s."""
-        model_euler = sportcub(attitude_rep='euler')
+        model_euler = sportcub(attitude_rep="euler")
 
         v_trim, stats = find_trim(
             model_euler,
@@ -370,22 +393,25 @@ class TestSportCubNode:
             ipopt_print_level=1,
         )
 
-        assert hasattr(v_trim, 'r'), 'State should have "r" field for rotation'
-        assert len(v_trim.r) == 3, f'Euler angles should be 3D, got {len(v_trim.r)}'
+        assert hasattr(v_trim, "r"), 'State should have "r" field for rotation'
+        assert len(v_trim.r) == 3, f"Euler angles should be 3D, got {len(v_trim.r)}"
 
         _, theta, phi = v_trim.r[0], v_trim.r[1], v_trim.r[2]
-        assert abs(phi) < np.deg2rad(5.0), f'Roll angle too large: {np.degrees(phi):.2f}°'
-        assert (
-            abs(theta) < np.deg2rad(15.0)
-        ), f'Pitch angle too large: {np.degrees(theta):.2f}°'
+        assert abs(phi) < np.deg2rad(
+            5.0
+        ), f"Roll angle too large: {np.degrees(phi):.2f}°"
+        assert abs(theta) < np.deg2rad(
+            15.0
+        ), f"Pitch angle too large: {np.degrees(theta):.2f}°"
 
         A, B, C, D = linearize_dynamics(model_euler, v_trim)
 
         expected_state_size = 3 + 3 + 3 + 3
-        assert A.shape == (expected_state_size, expected_state_size), (
-            f'A matrix size mismatch: {A.shape}'
-        )
-        assert B.shape[0] == expected_state_size, f'B matrix rows mismatch: {B.shape}'
+        assert A.shape == (
+            expected_state_size,
+            expected_state_size,
+        ), f"A matrix size mismatch: {A.shape}"
+        assert B.shape[0] == expected_state_size, f"B matrix rows mismatch: {B.shape}"
 
         modes = analyze_modes(A, names=model_euler.state_names)
         classified = classify_aircraft_modes(modes, model_euler.state_names)
@@ -403,39 +429,41 @@ class TestSportCubNode:
         out_indices = {}
         for field_name in model_euler._output_fields:
             field_info = model_euler.model_type._field_info[field_name]
-            dim = field_info['dim']
+            dim = field_info["dim"]
             out_indices[field_name] = (out_offset, out_offset + dim)
             out_offset += dim
 
-        F_b_idx = out_indices.get('F_b', (0, 3))
-        M_b_idx = out_indices.get('M_b', (0, 3))
-        F_b = outputs[F_b_idx[0]:F_b_idx[1]]
-        M_b = outputs[M_b_idx[0]:M_b_idx[1]]
+        F_b_idx = out_indices.get("F_b", (0, 3))
+        M_b_idx = out_indices.get("M_b", (0, 3))
+        F_b = outputs[F_b_idx[0] : F_b_idx[1]]
+        M_b = outputs[M_b_idx[0] : M_b_idx[1]]
 
         F_mag = np.linalg.norm(F_b)
         M_mag = np.linalg.norm(M_b)
-        assert abs(F_b[2]) < 0.02, f'Vertical force imbalance: {F_b[2]:.4f} N'
-        assert F_mag < 0.05, f'Net force too large: {F_mag:.4f} N'
-        assert M_mag < 0.02, f'Net moment too large: {M_mag:.4f} N·m'
+        assert abs(F_b[2]) < 0.02, f"Vertical force imbalance: {F_b[2]:.4f} N"
+        assert F_mag < 0.05, f"Net force too large: {F_mag:.4f} N"
+        assert M_mag < 0.02, f"Net moment too large: {M_mag:.4f} N·m"
 
-        sp = classified.get('short_period')
-        rd = classified.get('roll_damping')
-        assert sp is not None, 'Short period mode not found'
-        assert rd is not None, 'Roll damping mode not found'
-        assert sp['real'] < 0.0, 'Short period should be stable'
-        assert rd['real'] < 0.0, 'Roll damping should be stable'
+        sp = classified.get("short_period")
+        rd = classified.get("roll_damping")
+        assert sp is not None, "Short period mode not found"
+        assert rd is not None, "Roll damping mode not found"
+        assert sp["real"] < 0.0, "Short period should be stable"
+        assert rd["real"] < 0.0, "Roll damping should be stable"
 
         if sp is not None:
-            assert sp['zeta'] > 0.3, f"Short period under-damped: ζ={sp['zeta']:.3f}"
+            assert sp["zeta"] > 0.3, f"Short period under-damped: ζ={sp['zeta']:.3f}"
 
-        CL_idx = out_indices.get('CL', (0, 1))
-        CD_idx = out_indices.get('CD', (0, 1))
+        CL_idx = out_indices.get("CL", (0, 1))
+        CD_idx = out_indices.get("CD", (0, 1))
         CL = float(outputs[CL_idx[0]])
         CD = float(outputs[CD_idx[0]])
         LD = CL / CD if CD > 0 else 0
-        assert 5.0 < LD < 10.0, f'L/D out of range: {LD:.2f}'
+        assert 5.0 < LD < 10.0, f"L/D out of range: {LD:.2f}"
 
-    @pytest.mark.skip(reason='Trim solver convergence varies between quat and Euler at low speeds')
+    @pytest.mark.skip(
+        reason="Trim solver convergence varies between quat and Euler at low speeds"
+    )
     def test_trim_quaternion_vs_euler_5ms(self):
         """Verify quaternion and Euler trim solutions at 5 m/s."""
         pass

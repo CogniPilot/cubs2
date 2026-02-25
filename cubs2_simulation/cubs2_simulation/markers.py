@@ -28,7 +28,7 @@ def create_force_arrow(
     color: ColorRGBA,
     scale: float = 1.0,
     offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    frame_id: str = 'vehicle',
+    frame_id: str = "vehicle",
 ) -> Marker | None:
     """
     Create arrow marker for force vector.
@@ -65,7 +65,7 @@ def create_force_arrow(
     marker = Marker()
     marker.header.frame_id = frame_id
     marker.header.stamp = rclpy.time.Time().to_msg()  # Frame locking enabled
-    marker.ns = 'forces'
+    marker.ns = "forces"
     marker.id = marker_id
     marker.type = Marker.ARROW
     marker.action = Marker.ADD
@@ -97,7 +97,7 @@ def create_moment_arc(
     vec: np.ndarray,
     color: ColorRGBA,
     scale: float = 1.0,
-    frame_id: str = 'vehicle',
+    frame_id: str = "vehicle",
 ) -> Marker | None:
     """
     Create circular arc marker for moment vector using LINE_STRIP.
@@ -135,7 +135,7 @@ def create_moment_arc(
     marker = Marker()
     marker.header.frame_id = frame_id
     marker.header.stamp = rclpy.time.Time().to_msg()
-    marker.ns = 'moments'
+    marker.ns = "moments"
     marker.id = marker_id
     marker.type = Marker.LINE_STRIP
     marker.action = Marker.ADD
@@ -168,9 +168,7 @@ def create_moment_arc(
         angle = (i / (num_points - 1)) * angle_range
         # Point on circle in the perpendicular plane
         point = radius * (np.cos(angle) * u + np.sin(angle) * v)
-        points.append(
-            Point(x=float(point[0]), y=float(point[1]), z=float(point[2]))
-        )
+        points.append(Point(x=float(point[0]), y=float(point[1]), z=float(point[2])))
 
     # Add arrowhead at the end by creating small segments
     last_point = points[-1]

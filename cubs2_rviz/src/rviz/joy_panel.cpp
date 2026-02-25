@@ -199,11 +199,11 @@ JoyPanel::JoyPanel(QWidget * parent)
   onboard_mode_combo_->setCurrentIndex(0);
   mode_layout->addWidget(onboard_mode_combo_);
   
-  // Input Mode selector (Joystick / Auto-autolevel)
-  mode_layout->addWidget(new QLabel("Input Mode:"));
+  // Outerloop Mode selector (Manual / Auto)
+  mode_layout->addWidget(new QLabel("Outerloop Mode:"));
   input_mode_combo_ = new QComboBox();
-  input_mode_combo_->addItem("Joystick");
-  input_mode_combo_->addItem("Auto-autolevel");
+  input_mode_combo_->addItem("Manual");
+  input_mode_combo_->addItem("Auto");
   input_mode_combo_->setCurrentIndex(0);
   mode_layout->addWidget(input_mode_combo_);
   mode_layout->addStretch();
@@ -282,11 +282,22 @@ JoyPanel::JoyPanel(QWidget * parent)
   node_ = std::make_shared<rclcpp::Node>("joy_panel");
   joy_publisher_ = node_->create_publisher<cubs2_msgs::msg::AircraftControl>("/control_joy", 10);
   mode_publisher_ = node_->create_publisher<std_msgs::msg::Float32>("/control_mode", 10);
+  outerloop_mode_publisher_ = node_->create_publisher<std_msgs::msg::String>("/toggle_outerloop_mode", 10);
 
   // Create subscribers to monitor external control (e.g., from gamepad)
   joy_subscriber_ = node_->create_subscription<cubs2_msgs::msg::AircraftControl>(
       "/control_joy", 10,
     [this](const cubs2_msgs::msg::AircraftControl::SharedPtr msg) {controlCallback(msg);});
+
+  // Subscribe to auto control messages to update sliders in auto mode
+  auto_subscriber_ = node_->create_subscription<cubs2_msgs::msg::AircraftControl>(
+      "/control_auto", 10,
+    [this](const cubs2_msgs::msg::AircraftControl::SharedPtr msg) {autoControlCallback(msg);});
+
+  // Subscribe to outerloop mode changes from external sources (gamepad, etc.)
+  outerloop_mode_subscriber_ = node_->create_subscription<std_msgs::msg::String>(
+      "/toggle_outerloop_mode", 10,
+    [this](const std_msgs::msg::String::SharedPtr msg) {outerloopmodeCallback(msg);});
 
   // Create timer for publishing control inputs at 20 Hz
   control_timer_ = new QTimer(this);
@@ -420,13 +431,29 @@ void JoyPanel::onOnboardModeChanged(int index)
 
 void JoyPanel::onInputModeChanged(int index)
 {
-  input_mode_ = index;  // 0 = joystick, 1 = auto-autolevel
-  // Input mode selection would be handled by controllers
-  // (gamepad passes through vs autolevel commands)
+  input_mode_ = index;  // 0 = manual, 1 = auto
+  
+  // Update slider enable state based on mode
+  bool is_auto = (index == 1);
+  throttle_slider_->setEnabled(!is_auto && enabled_);
+  rudder_slider_->setEnabled(!is_auto && enabled_);
+  
+  // Publish outerloop mode to /toggle_outerloop_mode
+  std_msgs::msg::String msg;
+  msg.data = (index == 0) ? "manual" : "auto";
+  if (outerloop_mode_publisher_) {
+    outerloop_mode_publisher_->publish(msg);
+  }
 }
 
 void JoyPanel::controlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg)
 {
+  // Outerloop mode: manual --> listen to /control_joy for gamepad input, 
+  // auto --> listen to /control_auto for auto control input
+  if (input_mode_ != 0) {
+    return;
+  }
+  
   // Update mode combobox if changed from external source (gamepad, etc.)
   if (static_cast<int>(msg->mode) != onboard_mode_) {
     onboard_mode_ = static_cast<int>(msg->mode);
@@ -435,8 +462,36 @@ void JoyPanel::controlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr
     onboard_mode_combo_->blockSignals(false);
   }
   
-  // Always update display to show current control inputs
+  // Update display to show current control inputs from gamepad
   updateDisplayFromExternal(msg->aileron, msg->elevator, msg->throttle, msg->rudder);
+}
+
+void JoyPanel::autoControlCallback(const cubs2_msgs::msg::AircraftControl::SharedPtr msg)
+{
+  // Outerloop mode: manual --> listen to /control_joy for gamepad input,
+  if (input_mode_ != 1) {
+    return;
+  }
+  
+  // Update slider values to reflect auto control
+  updateDisplayFromExternal(msg->aileron, msg->elevator, msg->throttle, msg->rudder);
+}
+
+void JoyPanel::outerloopmodeCallback(const std_msgs::msg::String::SharedPtr msg)
+{
+  // Update outerloop mode combo box when changed externally (e.g., from gamepad)
+  int new_mode = (msg->data == "manual") ? 0 : 1;
+  if (new_mode != input_mode_) {
+    input_mode_ = new_mode;
+    input_mode_combo_->blockSignals(true);
+    input_mode_combo_->setCurrentIndex(input_mode_);
+    input_mode_combo_->blockSignals(false);
+    
+    // Update slider enable state based on new mode
+    bool is_auto = (new_mode == 1);
+    throttle_slider_->setEnabled(!is_auto && enabled_);
+    rudder_slider_->setEnabled(!is_auto && enabled_);
+  }
 }
 
 void JoyPanel::updateDisplayFromExternal(

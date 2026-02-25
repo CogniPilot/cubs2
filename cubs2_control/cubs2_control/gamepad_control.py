@@ -42,6 +42,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Empty
+from std_msgs.msg import String
 
 
 class GamepadControlNode(Node):
@@ -145,6 +146,8 @@ class GamepadControlNode(Node):
             AircraftControl, '/control_joy', 10)
         self.pub_reset = self.create_publisher(Empty, '/reset', 10)
         self.pub_pause = self.create_publisher(Empty, '/pause', 10)
+        self.pub_toggle_outerloop = self.create_publisher(
+            String, '/toggle_outerloop_mode', 10)
 
         # Subscriber to joy messages with QoS for no queuing
         from rclpy.qos import QoSHistoryPolicy
@@ -169,7 +172,8 @@ class GamepadControlNode(Node):
         self.elevator = 0.0
         self.throttle = self.throttle_default
         self.rudder = 0.0
-        self.mode = 0  # 0 = manual, 1 = stabilized
+        self.mode = 0  # 0 = manual, 1 = stabilized for inner loop onboard control # TODO: implement inner loop controller
+        self.outerloop_mode = 'manual'  # 'manual' or 'auto'
 
         # Trim values (applied as offsets to stick inputs)
         self.trim_aileron = 0.0
@@ -224,7 +228,9 @@ class GamepadControlNode(Node):
         self.get_logger().info(
             f'  Button {self.btn_trim_rud_right} (Y): Trim rudder right')
         self.get_logger().info(
-            f'  Button {self.btn_right_bumper}: Toggle flight mode (manual/stabilized)')
+            f'  Button {self.btn_left_bumper}: Toggle innerloop onboard mode (manual/stabilized)')        
+        self.get_logger().info(
+            f'  Button {self.btn_right_bumper}: Toggle outerloop mode (auto/manual)')
         dpad_type = (
             'buttons' if self.dpad_is_buttons else f'axes ({
                 self.axis_dpad_h}, {
@@ -246,7 +252,10 @@ class GamepadControlNode(Node):
             return False
         if button_idx >= len(self.last_buttons):
             return False
-        return msg.buttons[button_idx] and not self.last_buttons[button_idx]
+        # Button is pressed NOW and was NOT pressed BEFORE
+        currently_pressed = msg.buttons[button_idx]
+        previously_pressed = self.last_buttons[button_idx]
+        return currently_pressed and not previously_pressed
 
     def _button_held(self, msg: Joy, button_idx: int) -> bool:
         """Check if button is currently held down."""
@@ -518,10 +527,18 @@ class GamepadControlNode(Node):
                     self.trim_hold_count[self.btn_dpad_right] = 0
 
             # Button: Toggle flight mode (manual/stabilized)
-            if self._button_pressed(msg, self.btn_right_bumper):
+            if self._button_pressed(msg, self.btn_left_bumper):
                 self.mode = 1 - self.mode  # Toggle between 0 and 1
                 mode_name = 'STABILIZED' if self.mode == 1 else 'MANUAL'
                 self.get_logger().info(f'Flight mode changed to: {mode_name}')
+
+            # Button: Toggle outerloop mode (auto vs manual)
+            if self._button_pressed(msg, self.btn_right_bumper):
+                self.outerloop_mode = 'auto' if self.outerloop_mode == 'manual' else 'manual'
+                toggle_msg = String()
+                toggle_msg.data = self.outerloop_mode
+                self.pub_toggle_outerloop.publish(toggle_msg)
+                self.get_logger().info(f'Outerloop mode changed to: {self.outerloop_mode}')
 
             # Button: Exit node
             if self._button_pressed(msg, self.btn_exit):
@@ -532,9 +549,6 @@ class GamepadControlNode(Node):
             if self._button_pressed(msg, self.btn_pause_toggle):
                 self.pub_pause.publish(Empty())
                 self.get_logger().info('Sent /pause toggle')
-
-            # Update button state
-            self.last_buttons = list(msg.buttons)
 
         # Handle D-pad trim controls (axis-based)
         if not self.dpad_is_buttons and self.axis_dpad_h >= 0 and self.axis_dpad_v >= 0:
@@ -593,6 +607,13 @@ class GamepadControlNode(Node):
 
             self.last_dpad_h = dpad_h
             self.last_dpad_v = dpad_v
+
+        # Always update button state at the end of joy_callback
+        # This ensures proper edge detection for next callback
+        if len(msg.buttons) > 0:
+            if len(self.last_buttons) == 0:
+                self.last_buttons = [0] * len(msg.buttons)
+            self.last_buttons = list(msg.buttons)
 
         # Publish control messages
         self.publish_controls()
