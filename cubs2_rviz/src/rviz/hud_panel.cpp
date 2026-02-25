@@ -175,7 +175,7 @@ void HUDWidget::drawRollIndicator(QPainter & painter, int cx, int cy, int size)
   }
 
   // Draw current roll indicator (triangle)
-  painter.rotate(-roll_ * 180.0 / M_PI);
+  painter.rotate(roll_ * 180.0 / M_PI);
   painter.setBrush(QColor(255, 255, 0));
   painter.setPen(QPen(QColor(200, 200, 0), 2));
 
