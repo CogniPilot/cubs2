@@ -47,107 +47,103 @@ from std_msgs.msg import String
 
 class GamepadControlNode(Node):
     def __init__(self):
-        super().__init__('gamepad_control')
+        super().__init__("gamepad_control")
 
         # Declare button mapping parameters
-        self.declare_parameter('button_reset_neutral', 0)
-        self.declare_parameter('button_send_reset', 1)
-        self.declare_parameter('button_trim_rudder_left', 2)
-        self.declare_parameter('button_trim_rudder_right', 3)
-        self.declare_parameter('button_left_bumper', 4)
-        self.declare_parameter('button_right_bumper', 5)
-        self.declare_parameter('button_minus', 6)
-        self.declare_parameter('button_pause_toggle', 7)
-        self.declare_parameter('button_exit', 8)
-        self.declare_parameter('button_dpad_up', -1)
-        self.declare_parameter('button_dpad_down', -1)
-        self.declare_parameter('button_dpad_left', -1)
-        self.declare_parameter('button_dpad_right', -1)
+        self.declare_parameter("button_reset_neutral", 0)
+        self.declare_parameter("button_send_reset", 1)
+        self.declare_parameter("button_trim_rudder_left", 2)
+        self.declare_parameter("button_trim_rudder_right", 3)
+        self.declare_parameter("button_left_bumper", 4)
+        self.declare_parameter("button_right_bumper", 5)
+        self.declare_parameter("button_minus", 6)
+        self.declare_parameter("button_pause_toggle", 7)
+        self.declare_parameter("button_exit", 8)
+        self.declare_parameter("button_dpad_up", -1)
+        self.declare_parameter("button_dpad_down", -1)
+        self.declare_parameter("button_dpad_left", -1)
+        self.declare_parameter("button_dpad_right", -1)
 
         # Declare axis mapping parameters
-        self.declare_parameter('axis_aileron', 3)
-        self.declare_parameter('axis_elevator', 4)
-        self.declare_parameter('axis_rudder', 0)
-        self.declare_parameter('axis_throttle', 1)
-        self.declare_parameter('axis_dpad_horizontal', 6)
-        self.declare_parameter('axis_dpad_vertical', 7)
-        self.declare_parameter('axis_left_trigger', 2)
-        self.declare_parameter('axis_right_trigger', 5)
+        self.declare_parameter("axis_aileron", 3)
+        self.declare_parameter("axis_elevator", 4)
+        self.declare_parameter("axis_rudder", 0)
+        self.declare_parameter("axis_throttle", 1)
+        self.declare_parameter("axis_dpad_horizontal", 6)
+        self.declare_parameter("axis_dpad_vertical", 7)
+        self.declare_parameter("axis_left_trigger", 2)
+        self.declare_parameter("axis_right_trigger", 5)
 
         # Declare inversion parameters
-        self.declare_parameter('invert_aileron', False)
-        self.declare_parameter('invert_elevator', False)
-        self.declare_parameter('invert_rudder', False)
-        self.declare_parameter('invert_throttle', False)
+        self.declare_parameter("invert_aileron", False)
+        self.declare_parameter("invert_elevator", False)
+        self.declare_parameter("invert_rudder", False)
+        self.declare_parameter("invert_throttle", False)
 
         # Declare control parameters
-        self.declare_parameter('throttle_default', 0.0)
-        self.declare_parameter('deadzone', 0.05)
-        self.declare_parameter('trim_step', 0.01)
-        self.declare_parameter('throttle_step', 0.02)
-        self.declare_parameter('throttle_deadzone', 0.2)
-        self.declare_parameter('throttle_exponent', 3.0)
-        self.declare_parameter('aileron_exponent', 1.0)
-        self.declare_parameter('elevator_exponent', 1.0)
+        self.declare_parameter("throttle_default", 0.0)
+        self.declare_parameter("deadzone", 0.05)
+        self.declare_parameter("trim_step", 0.01)
+        self.declare_parameter("throttle_step", 0.02)
+        self.declare_parameter("throttle_deadzone", 0.2)
+        self.declare_parameter("throttle_exponent", 3.0)
+        self.declare_parameter("aileron_exponent", 1.0)
+        self.declare_parameter("elevator_exponent", 1.0)
 
         # D-pad configuration
-        self.declare_parameter('dpad_is_buttons', False)
-        self.declare_parameter('dpad_deadzone', 0.5)
+        self.declare_parameter("dpad_is_buttons", False)
+        self.declare_parameter("dpad_deadzone", 0.5)
 
         # Get button mappings
-        self.btn_reset_neutral = self.get_parameter(
-            'button_reset_neutral').value
-        self.btn_send_reset = self.get_parameter('button_send_reset').value
-        self.btn_trim_rud_left = self.get_parameter(
-            'button_trim_rudder_left').value
-        self.btn_trim_rud_right = self.get_parameter(
-            'button_trim_rudder_right').value
-        self.btn_left_bumper = self.get_parameter('button_left_bumper').value
-        self.btn_right_bumper = self.get_parameter('button_right_bumper').value
-        self.btn_minus = self.get_parameter('button_minus').value
-        self.btn_pause_toggle = self.get_parameter('button_pause_toggle').value
-        self.btn_exit = self.get_parameter('button_exit').value
-        self.btn_dpad_up = self.get_parameter('button_dpad_up').value
-        self.btn_dpad_down = self.get_parameter('button_dpad_down').value
-        self.btn_dpad_left = self.get_parameter('button_dpad_left').value
-        self.btn_dpad_right = self.get_parameter('button_dpad_right').value
+        self.btn_reset_neutral = self.get_parameter("button_reset_neutral").value
+        self.btn_send_reset = self.get_parameter("button_send_reset").value
+        self.btn_trim_rud_left = self.get_parameter("button_trim_rudder_left").value
+        self.btn_trim_rud_right = self.get_parameter("button_trim_rudder_right").value
+        self.btn_left_bumper = self.get_parameter("button_left_bumper").value
+        self.btn_right_bumper = self.get_parameter("button_right_bumper").value
+        self.btn_minus = self.get_parameter("button_minus").value
+        self.btn_pause_toggle = self.get_parameter("button_pause_toggle").value
+        self.btn_exit = self.get_parameter("button_exit").value
+        self.btn_dpad_up = self.get_parameter("button_dpad_up").value
+        self.btn_dpad_down = self.get_parameter("button_dpad_down").value
+        self.btn_dpad_left = self.get_parameter("button_dpad_left").value
+        self.btn_dpad_right = self.get_parameter("button_dpad_right").value
 
         # Get axis mappings
-        self.axis_throttle = self.get_parameter('axis_throttle').value
-        self.axis_rudder = self.get_parameter('axis_rudder').value
-        self.axis_elevator = self.get_parameter('axis_elevator').value
-        self.axis_aileron = self.get_parameter('axis_aileron').value
-        self.axis_dpad_h = self.get_parameter('axis_dpad_horizontal').value
-        self.axis_dpad_v = self.get_parameter('axis_dpad_vertical').value
-        self.axis_left_trigger = self.get_parameter('axis_left_trigger').value
-        self.axis_right_trigger = self.get_parameter(
-            'axis_right_trigger').value
+        self.axis_throttle = self.get_parameter("axis_throttle").value
+        self.axis_rudder = self.get_parameter("axis_rudder").value
+        self.axis_elevator = self.get_parameter("axis_elevator").value
+        self.axis_aileron = self.get_parameter("axis_aileron").value
+        self.axis_dpad_h = self.get_parameter("axis_dpad_horizontal").value
+        self.axis_dpad_v = self.get_parameter("axis_dpad_vertical").value
+        self.axis_left_trigger = self.get_parameter("axis_left_trigger").value
+        self.axis_right_trigger = self.get_parameter("axis_right_trigger").value
 
         # Get inversion flags
-        self.invert_elevator = self.get_parameter('invert_elevator').value
-        self.invert_aileron = self.get_parameter('invert_aileron').value
-        self.invert_rudder = self.get_parameter('invert_rudder').value
-        self.invert_throttle = self.get_parameter('invert_throttle').value
+        self.invert_elevator = self.get_parameter("invert_elevator").value
+        self.invert_aileron = self.get_parameter("invert_aileron").value
+        self.invert_rudder = self.get_parameter("invert_rudder").value
+        self.invert_throttle = self.get_parameter("invert_throttle").value
 
         # Get control parameters
-        self.throttle_default = self.get_parameter('throttle_default').value
-        self.deadzone = self.get_parameter('deadzone').value
-        self.trim_step = self.get_parameter('trim_step').value
-        self.throttle_step = self.get_parameter('throttle_step').value
-        self.throttle_deadzone = self.get_parameter('throttle_deadzone').value
-        self.throttle_exponent = self.get_parameter('throttle_exponent').value
-        self.aileron_exponent = self.get_parameter('aileron_exponent').value
-        self.elevator_exponent = self.get_parameter('elevator_exponent').value
-        self.dpad_is_buttons = self.get_parameter('dpad_is_buttons').value
-        self.dpad_deadzone = self.get_parameter('dpad_deadzone').value
+        self.throttle_default = self.get_parameter("throttle_default").value
+        self.deadzone = self.get_parameter("deadzone").value
+        self.trim_step = self.get_parameter("trim_step").value
+        self.throttle_step = self.get_parameter("throttle_step").value
+        self.throttle_deadzone = self.get_parameter("throttle_deadzone").value
+        self.throttle_exponent = self.get_parameter("throttle_exponent").value
+        self.aileron_exponent = self.get_parameter("aileron_exponent").value
+        self.elevator_exponent = self.get_parameter("elevator_exponent").value
+        self.dpad_is_buttons = self.get_parameter("dpad_is_buttons").value
+        self.dpad_deadzone = self.get_parameter("dpad_deadzone").value
 
         # Publishers
-        self.pub_control = self.create_publisher(
-            AircraftControl, '/control_joy', 10)
-        self.pub_reset = self.create_publisher(Empty, '/reset', 10)
-        self.pub_pause = self.create_publisher(Empty, '/pause', 10)
+        self.pub_control = self.create_publisher(AircraftControl, "/control_joy", 10)
+        self.pub_reset = self.create_publisher(Empty, "/reset", 10)
+        self.pub_pause = self.create_publisher(Empty, "/pause", 10)
         self.pub_toggle_outerloop = self.create_publisher(
-            String, '/toggle_outerloop_mode', 10)
+            String, "/toggle_outerloop_mode", 10
+        )
 
         # Subscriber to joy messages with QoS for no queuing
         from rclpy.qos import QoSHistoryPolicy
@@ -160,12 +156,14 @@ class GamepadControlNode(Node):
             depth=1,  # Only keep the latest message
         )
         self.sub_joy = self.create_subscription(
-            Joy, '/joy', self.joy_callback, qos_profile)
+            Joy, "/joy", self.joy_callback, qos_profile
+        )
 
         # Subscribe to external control messages (from RViz dropdown, etc.)
         # to sync mode changes from other sources
         self.sub_control = self.create_subscription(
-            AircraftControl, '/control_joy', self.control_callback, 10)
+            AircraftControl, "/control_joy", self.control_callback, 10
+        )
 
         # Current state
         self.aileron = 0.0
@@ -173,7 +171,7 @@ class GamepadControlNode(Node):
         self.throttle = self.throttle_default
         self.rudder = 0.0
         self.mode = 0  # 0 = manual, 1 = stabilized for inner loop onboard control # TODO: implement inner loop controller
-        self.outerloop_mode = 'manual'  # 'manual' or 'auto'
+        self.outerloop_mode = "manual"  # 'manual' or 'auto'
 
         # Trim values (applied as offsets to stick inputs)
         self.trim_aileron = 0.0
@@ -203,42 +201,48 @@ class GamepadControlNode(Node):
         # Time tracking for rate-independent throttle response
         self.last_joy_time = None
 
-        self.get_logger().info('Gamepad control node started')
-        self.get_logger().info('Control mode: RC Transmitter style (spring-loaded throttle)')
-        self.get_logger().info('Axis mapping:')
+        self.get_logger().info("Gamepad control node started")
         self.get_logger().info(
-            f'  Left stick Y (up/down)    -> Throttle bump up/down (axis {
-                self.axis_throttle})'
+            "Control mode: RC Transmitter style (spring-loaded throttle)"
+        )
+        self.get_logger().info("Axis mapping:")
+        self.get_logger().info(
+            f"  Left stick Y (up/down)    -> Throttle bump up/down (axis {self.axis_throttle})"
         )
         self.get_logger().info(
-            f'  Left stick X (left/right) -> Rudder (axis {self.axis_rudder})')
-        self.get_logger().info(
-            f'  Right stick Y (up/down)   -> Elevator (axis {
-                self.axis_elevator})'
+            f"  Left stick X (left/right) -> Rudder (axis {self.axis_rudder})"
         )
         self.get_logger().info(
-            f'  Right stick X (left/right)-> Aileron (axis {self.axis_aileron})')
-        self.get_logger().info('Button mapping:')
+            f"  Right stick Y (up/down)   -> Elevator (axis {self.axis_elevator})"
+        )
         self.get_logger().info(
-            f'  Button {self.btn_reset_neutral} (A): Reset to neutral')
+            f"  Right stick X (left/right)-> Aileron (axis {self.axis_aileron})"
+        )
+        self.get_logger().info("Button mapping:")
         self.get_logger().info(
-            f'  Button {self.btn_send_reset} (B): Send /reset')
+            f"  Button {self.btn_reset_neutral} (A): Reset to neutral"
+        )
+        self.get_logger().info(f"  Button {self.btn_send_reset} (B): Send /reset")
         self.get_logger().info(
-            f'  Button {self.btn_trim_rud_left} (X): Trim rudder left')
+            f"  Button {self.btn_trim_rud_left} (X): Trim rudder left"
+        )
         self.get_logger().info(
-            f'  Button {self.btn_trim_rud_right} (Y): Trim rudder right')
+            f"  Button {self.btn_trim_rud_right} (Y): Trim rudder right"
+        )
         self.get_logger().info(
-            f'  Button {self.btn_left_bumper}: Toggle innerloop onboard mode (manual/stabilized)')        
+            f"  Button {self.btn_left_bumper}: Toggle innerloop onboard mode (manual/stabilized)"
+        )
         self.get_logger().info(
-            f'  Button {self.btn_right_bumper}: Toggle outerloop mode (auto/manual)')
+            f"  Button {self.btn_right_bumper}: Toggle outerloop mode (auto/manual)"
+        )
         dpad_type = (
-            'buttons' if self.dpad_is_buttons else f'axes ({
-                self.axis_dpad_h}, {
-                self.axis_dpad_v})')
-        self.get_logger().info(f'  D-pad ({dpad_type}): Trim elevator/aileron')
-        self.get_logger().info(f'  Button {self.btn_exit}: Exit')
-        self.get_logger().info(
-            f'  Button {self.btn_pause_toggle}: Toggle /pause')
+            "buttons"
+            if self.dpad_is_buttons
+            else f"axes ({self.axis_dpad_h}, {self.axis_dpad_v})"
+        )
+        self.get_logger().info(f"  D-pad ({dpad_type}): Trim elevator/aileron")
+        self.get_logger().info(f"  Button {self.btn_exit}: Exit")
+        self.get_logger().info(f"  Button {self.btn_pause_toggle}: Toggle /pause")
 
     def apply_deadzone(self, value: float) -> float:
         """Apply deadzone to axis value."""
@@ -330,7 +334,7 @@ class GamepadControlNode(Node):
 
         """
         # Use separate counters for up and down
-        if direction == 'up':
+        if direction == "up":
             self.throttle_hold_count_up += 1
             count = self.throttle_hold_count_up
         else:
@@ -376,21 +380,20 @@ class GamepadControlNode(Node):
 
         # Increment/decrement throttle with exponential rate based on stick
         # deflection
-        if abs(
-                throttle_raw) > self.throttle_deadzone:  # Threshold to avoid accidental bumps
+        if (
+            abs(throttle_raw) > self.throttle_deadzone
+        ):  # Threshold to avoid accidental bumps
             # Exponential factor: raise deflection to configurable power
             # Higher exponent = finer control near center, much faster at
             # extremes
             deflection_factor = abs(throttle_raw) ** self.throttle_exponent
 
             if throttle_raw > self.throttle_deadzone:  # Stick pushed up
-                step = self._get_throttle_step(
-                    'up') * deflection_factor * (dt / 0.02)
+                step = self._get_throttle_step("up") * deflection_factor * (dt / 0.02)
                 self.throttle += step
                 self.throttle_hold_count_down = 0  # Reset down counter
             else:  # Stick pushed down (throttle_raw < -0.2)
-                step = self._get_throttle_step(
-                    'down') * deflection_factor * (dt / 0.02)
+                step = self._get_throttle_step("down") * deflection_factor * (dt / 0.02)
                 self.throttle -= step
                 self.throttle_hold_count_up = 0  # Reset up counter
         else:
@@ -417,8 +420,7 @@ class GamepadControlNode(Node):
         # Apply exponential response while preserving sign
         if self.elevator_exponent != 1.0:
             elevator_sign = 1.0 if elevator_raw >= 0.0 else -1.0
-            elevator_raw = elevator_sign * \
-                (abs(elevator_raw) ** self.elevator_exponent)
+            elevator_raw = elevator_sign * (abs(elevator_raw) ** self.elevator_exponent)
         self.elevator = max(-1.0, min(1.0, elevator_raw + self.trim_elevator))
 
         # Right stick X -> Aileron [-1, 1]
@@ -428,8 +430,7 @@ class GamepadControlNode(Node):
         # Apply exponential response while preserving sign
         if self.aileron_exponent != 1.0:
             aileron_sign = 1.0 if aileron_raw >= 0.0 else -1.0
-            aileron_raw = aileron_sign * \
-                (abs(aileron_raw) ** self.aileron_exponent)
+            aileron_raw = aileron_sign * (abs(aileron_raw) ** self.aileron_exponent)
         self.aileron = max(-1.0, min(1.0, aileron_raw + self.trim_aileron))
 
         # Handle buttons (edge detection - trigger on press, not hold)
@@ -448,22 +449,20 @@ class GamepadControlNode(Node):
                 self.trim_elevator = 0.0
                 self.trim_throttle = 0.0
                 self.trim_rudder = 0.0
-                self.get_logger().info('Reset to neutral (trim cleared)')
+                self.get_logger().info("Reset to neutral (trim cleared)")
 
             # Button: Send /reset
             if self._button_pressed(msg, self.btn_send_reset):
                 self.pub_reset.publish(Empty())
-                self.get_logger().info('Sent /reset')
+                self.get_logger().info("Sent /reset")
 
             # Button: Trim rudder left
             if self._button_held(msg, self.btn_trim_rud_left):
                 step = self._get_trim_step(self.btn_trim_rud_left)
                 self.trim_rudder -= step
                 self.get_logger().info(
-                    f'Trim rudder: {
-                        self.trim_rudder:.3f} rad ({
-                        math.degrees(
-                            self.trim_rudder):.2f}°)')
+                    f"Trim rudder: {self.trim_rudder:.3f} rad ({math.degrees(self.trim_rudder):.2f}°)"
+                )
             else:
                 self.trim_hold_count[self.btn_trim_rud_left] = 0
 
@@ -472,10 +471,8 @@ class GamepadControlNode(Node):
                 step = self._get_trim_step(self.btn_trim_rud_right)
                 self.trim_rudder += step
                 self.get_logger().info(
-                    f'Trim rudder: {
-                        self.trim_rudder:.3f} rad ({
-                        math.degrees(
-                            self.trim_rudder):.2f}°)')
+                    f"Trim rudder: {self.trim_rudder:.3f} rad ({math.degrees(self.trim_rudder):.2f}°)"
+                )
             else:
                 self.trim_hold_count[self.btn_trim_rud_right] = 0
 
@@ -486,10 +483,8 @@ class GamepadControlNode(Node):
                     step = self._get_trim_step(self.btn_dpad_up)
                     self.trim_elevator -= step
                     self.get_logger().info(
-                        f'Trim elevator: {
-                            self.trim_elevator:.3f} rad ({
-                            math.degrees(
-                                self.trim_elevator):.2f}°)')
+                        f"Trim elevator: {self.trim_elevator:.3f} rad ({math.degrees(self.trim_elevator):.2f}°)"
+                    )
                 else:
                     self.trim_hold_count[self.btn_dpad_up] = 0
 
@@ -497,10 +492,8 @@ class GamepadControlNode(Node):
                     step = self._get_trim_step(self.btn_dpad_down)
                     self.trim_elevator += step
                     self.get_logger().info(
-                        f'Trim elevator: {
-                            self.trim_elevator:.3f} rad ({
-                            math.degrees(
-                                self.trim_elevator):.2f}°)')
+                        f"Trim elevator: {self.trim_elevator:.3f} rad ({math.degrees(self.trim_elevator):.2f}°)"
+                    )
                 else:
                     self.trim_hold_count[self.btn_dpad_down] = 0
 
@@ -508,10 +501,8 @@ class GamepadControlNode(Node):
                     step = self._get_trim_step(self.btn_dpad_left)
                     self.trim_aileron -= step
                     self.get_logger().info(
-                        f'Trim aileron: {
-                            self.trim_aileron:.3f} rad ({
-                            math.degrees(
-                                self.trim_aileron):.2f}°)')
+                        f"Trim aileron: {self.trim_aileron:.3f} rad ({math.degrees(self.trim_aileron):.2f}°)"
+                    )
                 else:
                     self.trim_hold_count[self.btn_dpad_left] = 0
 
@@ -519,36 +510,38 @@ class GamepadControlNode(Node):
                     step = self._get_trim_step(self.btn_dpad_right)
                     self.trim_aileron += step
                     self.get_logger().info(
-                        f'Trim aileron: {
-                            self.trim_aileron:.3f} rad ({
-                            math.degrees(
-                                self.trim_aileron):.2f}°)')
+                        f"Trim aileron: {self.trim_aileron:.3f} rad ({math.degrees(self.trim_aileron):.2f}°)"
+                    )
                 else:
                     self.trim_hold_count[self.btn_dpad_right] = 0
 
             # Button: Toggle flight mode (manual/stabilized)
             if self._button_pressed(msg, self.btn_left_bumper):
                 self.mode = 1 - self.mode  # Toggle between 0 and 1
-                mode_name = 'STABILIZED' if self.mode == 1 else 'MANUAL'
-                self.get_logger().info(f'Flight mode changed to: {mode_name}')
+                mode_name = "STABILIZED" if self.mode == 1 else "MANUAL"
+                self.get_logger().info(f"Flight mode changed to: {mode_name}")
 
             # Button: Toggle outerloop mode (auto vs manual)
             if self._button_pressed(msg, self.btn_right_bumper):
-                self.outerloop_mode = 'auto' if self.outerloop_mode == 'manual' else 'manual'
+                self.outerloop_mode = (
+                    "auto" if self.outerloop_mode == "manual" else "manual"
+                )
                 toggle_msg = String()
                 toggle_msg.data = self.outerloop_mode
                 self.pub_toggle_outerloop.publish(toggle_msg)
-                self.get_logger().info(f'Outerloop mode changed to: {self.outerloop_mode}')
+                self.get_logger().info(
+                    f"Outerloop mode changed to: {self.outerloop_mode}"
+                )
 
             # Button: Exit node
             if self._button_pressed(msg, self.btn_exit):
-                self.get_logger().info('Exit button pressed, shutting down...')
+                self.get_logger().info("Exit button pressed, shutting down...")
                 raise KeyboardInterrupt()
 
             # Button: Toggle pause
             if self._button_pressed(msg, self.btn_pause_toggle):
                 self.pub_pause.publish(Empty())
-                self.get_logger().info('Sent /pause toggle')
+                self.get_logger().info("Sent /pause toggle")
 
         # Handle D-pad trim controls (axis-based)
         if not self.dpad_is_buttons and self.axis_dpad_h >= 0 and self.axis_dpad_v >= 0:
@@ -558,52 +551,48 @@ class GamepadControlNode(Node):
             # Trim elevator with vertical D-pad
             if dpad_v > self.dpad_deadzone:
                 step = self._get_trim_step_axis(
-                    'dpad_v_up', dpad_v > self.dpad_deadzone)
+                    "dpad_v_up", dpad_v > self.dpad_deadzone
+                )
                 self.trim_elevator -= step
                 if abs(dpad_v - self.last_dpad_v) > 0.1:  # Only log on change
                     self.get_logger().info(
-                        f'Trim elevator: {
-                            self.trim_elevator:.3f} rad ({
-                            math.degrees(
-                                self.trim_elevator):.2f}°)')
+                        f"Trim elevator: {self.trim_elevator:.3f} rad ({math.degrees(self.trim_elevator):.2f}°)"
+                    )
             elif dpad_v < -self.dpad_deadzone:
                 step = self._get_trim_step_axis(
-                    'dpad_v_down', dpad_v < -self.dpad_deadzone)
+                    "dpad_v_down", dpad_v < -self.dpad_deadzone
+                )
                 self.trim_elevator += step
                 if abs(dpad_v - self.last_dpad_v) > 0.1:
                     self.get_logger().info(
-                        f'Trim elevator: {
-                            self.trim_elevator:.3f} rad ({
-                            math.degrees(
-                                self.trim_elevator):.2f}°)')
+                        f"Trim elevator: {self.trim_elevator:.3f} rad ({math.degrees(self.trim_elevator):.2f}°)"
+                    )
             else:
-                self.trim_hold_count['dpad_v_up'] = 0
-                self.trim_hold_count['dpad_v_down'] = 0
+                self.trim_hold_count["dpad_v_up"] = 0
+                self.trim_hold_count["dpad_v_down"] = 0
 
             # Trim aileron with horizontal D-pad
             if dpad_h > self.dpad_deadzone:
                 step = self._get_trim_step_axis(
-                    'dpad_h_left', dpad_h > self.dpad_deadzone)
+                    "dpad_h_left", dpad_h > self.dpad_deadzone
+                )
                 self.trim_aileron -= step  # Left is positive, so subtract for left trim
                 if abs(dpad_h - self.last_dpad_h) > 0.1:
                     self.get_logger().info(
-                        f'Trim aileron: {
-                            self.trim_aileron:.3f} rad ({
-                            math.degrees(
-                                self.trim_aileron):.2f}°)')
+                        f"Trim aileron: {self.trim_aileron:.3f} rad ({math.degrees(self.trim_aileron):.2f}°)"
+                    )
             elif dpad_h < -self.dpad_deadzone:
                 step = self._get_trim_step_axis(
-                    'dpad_h_right', dpad_h < -self.dpad_deadzone)
+                    "dpad_h_right", dpad_h < -self.dpad_deadzone
+                )
                 self.trim_aileron += step  # Right is negative, so add for right trim
                 if abs(dpad_h - self.last_dpad_h) > 0.1:
                     self.get_logger().info(
-                        f'Trim aileron: {
-                            self.trim_aileron:.3f} rad ({
-                            math.degrees(
-                                self.trim_aileron):.2f}°)')
+                        f"Trim aileron: {self.trim_aileron:.3f} rad ({math.degrees(self.trim_aileron):.2f}°)"
+                    )
             else:
-                self.trim_hold_count['dpad_h_left'] = 0
-                self.trim_hold_count['dpad_h_right'] = 0
+                self.trim_hold_count["dpad_h_left"] = 0
+                self.trim_hold_count["dpad_h_right"] = 0
 
             self.last_dpad_h = dpad_h
             self.last_dpad_v = dpad_v
@@ -621,7 +610,7 @@ class GamepadControlNode(Node):
     def control_callback(self, msg: AircraftControl):
         """
         Listen for external control messages (e.g., from RViz dropdown).
-        
+
         Syncs mode changes from other sources so both gamepad and dropdown
         control the same mode.
         """
@@ -629,8 +618,8 @@ class GamepadControlNode(Node):
         external_mode = int(msg.mode)
         if external_mode != self.mode:
             self.mode = external_mode
-            mode_name = 'STABILIZED' if self.mode == 1 else 'MANUAL'
-            self.get_logger().info(f'Flight mode synced to: {mode_name}')
+            mode_name = "STABILIZED" if self.mode == 1 else "MANUAL"
+            self.get_logger().info(f"Flight mode synced to: {mode_name}")
 
     def publish_controls(self):
         """Publish current control state as AircraftControl message."""
@@ -650,10 +639,10 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info('Shutting down gamepad control node')
+        node.get_logger().info("Shutting down gamepad control node")
     node.destroy_node()
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

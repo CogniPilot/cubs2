@@ -50,7 +50,7 @@ class SimNode(Node):
         self.dt = float(self.get_parameter("dt").value)
 
         # Toggle Auto or Manual Input
-        self.declare_parameter('outerloop_mode', 'manual')
+        self.declare_parameter("outerloop_mode", "manual")
 
         # Toggle force/moment visualization
         self.declare_parameter("show_forces", True)

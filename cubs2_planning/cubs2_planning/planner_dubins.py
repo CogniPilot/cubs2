@@ -46,39 +46,37 @@ import casadi as ca
 
 class DubinsGatePlannerNode(Node):
     def __init__(self):
-        super().__init__('dubins_gate_planner')
+        super().__init__("dubins_gate_planner")
 
         self.declare_parameter(
-            'racecourse_yaml',
-            'package://racecourse_description/config/racecourse.yaml')
-        self.declare_parameter('turn_radius', 5.0)
-        self.declare_parameter('sample_points', 200)
-        self.declare_parameter('show_turn_circles', False)
-        self.declare_parameter('show_gate_turn_circles', False)
-        self.declare_parameter('show_headings', False)
-        self.declare_parameter('show_path_marker', False)
-        self.declare_parameter('planner.heading_spacing', 20)
-        self.declare_parameter('planner.altitude', 2.0)
+            "racecourse_yaml", "package://racecourse_description/config/racecourse.yaml"
+        )
+        self.declare_parameter("turn_radius", 5.0)
+        self.declare_parameter("sample_points", 200)
+        self.declare_parameter("show_turn_circles", False)
+        self.declare_parameter("show_gate_turn_circles", False)
+        self.declare_parameter("show_headings", False)
+        self.declare_parameter("show_path_marker", False)
+        self.declare_parameter("planner.heading_spacing", 20)
+        self.declare_parameter("planner.altitude", 2.0)
         self.declare_parameter(
-            'planner.gate_sequence', [0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]
+            "planner.gate_sequence", [0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]
         )  # Default sequence
         # m/s - velocity along trajectory
-        self.declare_parameter('planner.velocity', 5.0)
-        self.declare_parameter('reference_frame_id',
-                               'reference')  # TF frame name
-        self.declare_parameter('max_distance', 3)
+        self.declare_parameter("planner.velocity", 5.0)
+        self.declare_parameter("reference_frame_id", "reference")  # TF frame name
+        self.declare_parameter("max_distance", 3)
 
-        self.marker_pub = self.create_publisher(
-            MarkerArray, 'dubins_trajectory', 10)
-        self.path_pub = self.create_publisher(Path, 'dubins_path', 10)
+        self.marker_pub = self.create_publisher(MarkerArray, "dubins_trajectory", 10)
+        self.path_pub = self.create_publisher(Path, "dubins_path", 10)
 
         # TF broadcaster for reference trajectory position
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        yaml_path = self.get_parameter('racecourse_yaml').value
+        yaml_path = self.get_parameter("racecourse_yaml").value
         self.racecourse = RacecourseLoader(yaml_path)
 
-        self.get_logger().debug(f'Loaded {len(self.racecourse.gates)} gates')
+        self.get_logger().debug(f"Loaded {len(self.racecourse.gates)} gates")
 
         self.plan_fn, self.eval_fn = derive_dubins()
         self.segments = self.plan_trajectory()
@@ -86,7 +84,7 @@ class DubinsGatePlannerNode(Node):
         # Flatten all trajectory points for time-based lookup
         self.trajectory_points = []
         for seg in self.segments:
-            self.trajectory_points.extend(seg['points'])
+            self.trajectory_points.extend(seg["points"])
 
         # Calculate total arc length and time for each point
         self._compute_trajectory_timing()
@@ -96,9 +94,10 @@ class DubinsGatePlannerNode(Node):
 
         self.timer = self.create_timer(1.0, self.publish_visualization)
         self.tf_timer = self.create_timer(
-            0.02, self.publish_reference_tf)  # 50 Hz TF updates
+            0.02, self.publish_reference_tf
+        )  # 50 Hz TF updates
 
-        self.get_logger().info('started')
+        self.get_logger().info("started")
         self.previous_time = self.start_time
         self.elapsed_time = 0
 
@@ -106,26 +105,30 @@ class DubinsGatePlannerNode(Node):
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
         # Change these to your frame names
-        self.frame_ref = self.get_parameter('reference_frame_id').value
-        self.frame_true = 'vehicle'
+        self.frame_ref = self.get_parameter("reference_frame_id").value
+        self.frame_true = "vehicle"
 
         # Publish Pose for reference
-        self.pose_pub = self.create_publisher(PoseWithCovarianceStamped, 'reference_pose', 10)
+        self.pose_pub = self.create_publisher(
+            PoseWithCovarianceStamped, "reference_pose", 10
+        )
         self.relative_pose_position = np.array([0.0, 0.0, 0.0])
 
         # Timer — check at 30 Hz
-        self.timer = self.create_timer(1.0/100.0, self.update_distance)
+        self.timer = self.create_timer(1.0 / 100.0, self.update_distance)
         self.dist = 0
 
-        self.speed_pub = self.create_publisher(Twist, 'reference_speed', 10)
+        self.speed_pub = self.create_publisher(Twist, "reference_speed", 10)
 
     def update_distance(self):
         try:
             # lookup_transform(target_frame, source_frame, time)
             tf_ref = self.tf_buffer.lookup_transform(
-                self.racecourse.frame_id, self.frame_ref, rclpy.time.Time())
+                self.racecourse.frame_id, self.frame_ref, rclpy.time.Time()
+            )
             tf_true = self.tf_buffer.lookup_transform(
-                self.racecourse.frame_id, self.frame_true, rclpy.time.Time())
+                self.racecourse.frame_id, self.frame_true, rclpy.time.Time()
+            )
         except LookupException:
             self.get_logger().warn("TF not available yet")
             return
@@ -139,25 +142,52 @@ class DubinsGatePlannerNode(Node):
         by = tf_true.transform.translation.y
         bz = tf_true.transform.translation.z
 
-        ref = SE3Quat.elem(ca.DM(np.array([ax, ay, az, tf_ref.transform.rotation.w, tf_ref.transform.rotation.x, tf_ref.transform.rotation.y, tf_ref.transform.rotation.z])))
-        true = SE3Quat.elem(ca.DM(np.array([bx, by, bz, tf_ref.transform.rotation.w, tf_true.transform.rotation.x, tf_true.transform.rotation.y, tf_true.transform.rotation.z])))
+        ref = SE3Quat.elem(
+            ca.DM(
+                np.array(
+                    [
+                        ax,
+                        ay,
+                        az,
+                        tf_ref.transform.rotation.w,
+                        tf_ref.transform.rotation.x,
+                        tf_ref.transform.rotation.y,
+                        tf_ref.transform.rotation.z,
+                    ]
+                )
+            )
+        )
+        true = SE3Quat.elem(
+            ca.DM(
+                np.array(
+                    [
+                        bx,
+                        by,
+                        bz,
+                        tf_ref.transform.rotation.w,
+                        tf_true.transform.rotation.x,
+                        tf_true.transform.rotation.y,
+                        tf_true.transform.rotation.z,
+                    ]
+                )
+            )
+        )
 
-        # Put true state in ref frame   
+        # Put true state in ref frame
         true_in_ref = SE3Quat.product(ref.inverse(), true)
         true_in_ref_pos = true_in_ref.param
         true_in_ref_pos = np.array(ca.DM(true_in_ref_pos)).flatten()
 
-        self.relative_pose_position = true_in_ref_pos[:3] 
+        self.relative_pose_position = true_in_ref_pos[:3]
 
         # Euclidean distance
-        self.dist = np.linalg.norm(np.array([ax-bx, ay-by, az-bz]))
-
+        self.dist = np.linalg.norm(np.array([ax - bx, ay - by, az - bz]))
 
         trel = TransformStamped()
         current_time = self.get_clock().now()
         trel.header.stamp = current_time.to_msg()
-        trel.header.frame_id = self.get_parameter('reference_frame_id').value
-        trel.child_frame_id = 'error_relative_to_reference'
+        trel.header.frame_id = self.get_parameter("reference_frame_id").value
+        trel.child_frame_id = "error_relative_to_reference"
         trel.transform.translation.x = true_in_ref_pos[0]
         trel.transform.translation.y = true_in_ref_pos[1]
         trel.transform.translation.z = true_in_ref_pos[2]
@@ -168,11 +198,10 @@ class DubinsGatePlannerNode(Node):
 
         self.tf_broadcaster.sendTransform(trel)
 
-
     def plan_trajectory(self):
-        R = self.get_parameter('turn_radius').value
-        n = self.get_parameter('sample_points').value
-        gate_sequence = self.get_parameter('planner.gate_sequence').value
+        R = self.get_parameter("turn_radius").value
+        n = self.get_parameter("sample_points").value
+        gate_sequence = self.get_parameter("planner.gate_sequence").value
 
         all_gates = self.racecourse.gates
 
@@ -180,8 +209,8 @@ class DubinsGatePlannerNode(Node):
         try:
             ordered_gates = [all_gates[idx] for idx in gate_sequence]
         except IndexError as e:
-            self.get_logger().error(f'Invalid gate index in sequence: {e}')
-            self.get_logger().error(f'Available gates: 0-{len(all_gates) - 1}')
+            self.get_logger().error(f"Invalid gate index in sequence: {e}")
+            self.get_logger().error(f"Available gates: 0-{len(all_gates) - 1}")
             return []
 
         segments = []
@@ -193,7 +222,8 @@ class DubinsGatePlannerNode(Node):
             p1 = np.array([g1.center[0], g1.center[1]])
 
             cost, ptype, a1, d, a2, tp0, tp1, c0, c1 = self.plan_fn(
-                p0, g0.yaw, p1, g1.yaw, R)
+                p0, g0.yaw, p1, g1.yaw, R
+            )
 
             c0_arr = np.array(c0).flatten()
             c1_arr = np.array(c1).flatten()
@@ -214,14 +244,13 @@ class DubinsGatePlannerNode(Node):
                     R,
                 )
                 z = g0.center[2] + (g1.center[2] - g0.center[2]) * s
-                points.append(
-                    {'pos': [float(x), float(y), z], 'psi': float(psi)})
+                points.append({"pos": [float(x), float(y), z], "psi": float(psi)})
 
             segments.append(
                 {
-                    'points': points,
-                    'centers': [c0_arr, c1_arr],
-                    'z': g0.center[0],
+                    "points": points,
+                    "centers": [c0_arr, c1_arr],
+                    "z": g0.center[0],
                 }
             )
 
@@ -232,7 +261,7 @@ class DubinsGatePlannerNode(Node):
 
         waypoints = []
         for i, gate in enumerate(ordered_gates):
-            waypoints.append({'pos': gate.center, 'yaw': gate.yaw, 'name': f'WP{i}'})
+            waypoints.append({"pos": gate.center, "yaw": gate.yaw, "name": f"WP{i}"})
 
         turn_radius = R
         num_points_per_segment = n
@@ -246,31 +275,31 @@ class DubinsGatePlannerNode(Node):
         for i in range(len(waypoints) - 1):
             wp_start = waypoints[i]
             wp_end = waypoints[i + 1]
-            
+
             # Plan Dubins path
             plan = plan_dubins_path(
-                wp_start['pos'],
-                wp_start['yaw'],
-                wp_end['pos'],
-                wp_end['yaw'],
-                turn_radius
+                wp_start["pos"],
+                wp_start["yaw"],
+                wp_end["pos"],
+                wp_end["yaw"],
+                turn_radius,
             )
             dubins_plans.append(plan)
-            
+
             # Evaluate path
             path_points = evaluate_dubins_path(
                 plan,
-                wp_start['pos'],
-                wp_start['yaw'],
-                wp_end['pos'],
-                wp_end['yaw'],
+                wp_start["pos"],
+                wp_start["yaw"],
+                wp_end["pos"],
+                wp_end["yaw"],
                 turn_radius,
-                num_points=num_points_per_segment
+                num_points=num_points_per_segment,
             )
             dubins_paths.append(path_points)
-            
+
             # Calculate segment lengths from evaluated path
-            path_type = plan['type']
+            path_type = plan["type"]
             total_seg_length = 0
             for j in range(1, len(path_points)):
                 total_seg_length += np.linalg.norm(
