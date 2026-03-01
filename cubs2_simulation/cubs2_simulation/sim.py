@@ -16,7 +16,6 @@
 from beartype import beartype
 from builtin_interfaces.msg import Time
 import casadi as ca
-from cubs2_control.autolevel_controller import autolevel_controller
 from cubs2_dynamics.sportcub import sportcub
 from cubs2_msgs.msg import AircraftControl
 from cubs2_simulation.markers import create_force_arrow
@@ -141,8 +140,6 @@ class SimNode(Node):
 
         # Joint state publisher for control surface and propeller animation
         self.joint_state_publisher = self.create_publisher(
-            JointState, "/vehicle/joint_states", 10
-        )
             JointState, "/vehicle/joint_states", 10
         )
 
