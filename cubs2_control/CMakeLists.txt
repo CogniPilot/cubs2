@@ -14,6 +14,7 @@ ament_python_install_package(${PROJECT_NAME})
 # Install Python executables
 install(PROGRAMS
   ${PROJECT_NAME}/gamepad_control.py
+  ${PROJECT_NAME}/auto_controller.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

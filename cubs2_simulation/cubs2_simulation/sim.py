@@ -51,7 +51,7 @@ class SimNode(Node):
         self.dt = float(self.get_parameter("dt").value)
 
         # Toggle Auto or Manual Input
-        self.declare_parameter("outerloop_mode", "manual")
+        self.declare_parameter('outerloop_mode', 'manual')
 
         # Toggle force/moment visualization
         self.declare_parameter("show_forces", True)
@@ -141,6 +141,8 @@ class SimNode(Node):
 
         # Joint state publisher for control surface and propeller animation
         self.joint_state_publisher = self.create_publisher(
+            JointState, "/vehicle/joint_states", 10
+        )
             JointState, "/vehicle/joint_states", 10
         )
 
