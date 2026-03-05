@@ -63,7 +63,7 @@ class DubinsGatePlannerNode(Node):
             "planner.gate_sequence", [0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]
         )  # Default sequence
         # m/s - velocity along trajectory
-        self.declare_parameter("planner.velocity", 5.0)
+        self.declare_parameter("planner.velocity", 6.0)
         self.declare_parameter("reference_frame_id", "reference")  # TF frame name
         self.declare_parameter("max_distance", 3)
 

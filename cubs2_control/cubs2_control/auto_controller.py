@@ -42,7 +42,7 @@ class AutoControlNode(Node):
         # Trim values (applied as offsets to stick inputs)
         self.trim_aileron = 0.0
         self.trim_elevator = 0.0
-        self.trim_throttle = 0.35
+        self.trim_throttle = 0.00
         self.trim_rudder = 0.0
 
         # Reference trajectory subscriber
@@ -85,6 +85,7 @@ class AutoControlNode(Node):
             "des_gamma": 0.0,
             "des_heading": 0.0,
             "des_a": 0.0,
+            "des_phi": 0.0,
         }
 
         # Store reference pose
@@ -187,6 +188,7 @@ class AutoControlNode(Node):
 
         # -------------------Desired Thrust-------------------#
         # Specific energy rate error
+        # print(r_gamma- gamma_est)
         error_norm_Es_dot = (r_gamma - gamma_est) + (r_V_dot - vdot_est) / self.g
 
         # Desired thrust
@@ -277,11 +279,15 @@ class AutoControlNode(Node):
             rclpy.time.Time(),
         )
         cross_track = transform.transform.translation.y
-        K_cc = 5
-        Heading_max = np.deg2rad(65)
-        r_heading = float(ref_heading) - min(
-            cross_track / K_cc * Heading_max, Heading_max
-        )  # desired heading yaw rate
+        self.error_xtrack_integral += cross_track * self.dt
+        K_pxt = 0.1
+        K_ixt = 0.03
+        # Heading_max = np.deg2rad(65)
+        # r_heading = float(ref_heading) - min(
+        #     cross_track / K_cc * Heading_max, Heading_max
+        # )  # desired heading yaw rate
+
+        r_heading = ref_heading  # float(ref_heading) #+ K_ixt * self.error_xtrack_integral + K_pxt * cross_track
 
         # -------------------Elevator Control-------------------#
         # Compute errors
@@ -328,13 +334,21 @@ class AutoControlNode(Node):
         ):  # small deadband to prevent sudden flip near wrap
             chi_err = 0.0
 
+        cross_track = transform.transform.translation.y
+        self.error_xtrack_integral += cross_track * self.dt
+
+        phi_xt = cross_track / 10 * np.pi / 4
+
         chi_dot_des = (
             self.param.k_chi * chi_err
         )  # desired yaw rate to correct heading error
         Vg = max(V_est, 0.05)  # ground speed, avoid div by zero
-        phi_des = np.arctan2(
-            Vg * chi_dot_des, self.g
+        phi_des = (
+            np.arctan2(Vg * chi_dot_des, self.g) + ref_data["des_phi"] + phi_xt
         )  # Balmer, "Modelling and Control of a Fixed-wing UAV for Landings on Mobile Landing Platforms" (eqn 3.3)
+
+        print("Desired Phi:", ref_data["des_phi"])
+        print("Other phi:", np.arctan2(Vg * chi_dot_des, self.g))
 
         phi_des = float(np.clip(phi_des, -self.phi_lim, self.phi_lim))
         dphi_max = self.phi_dot_lim * self.dt
@@ -363,9 +377,8 @@ class AutoControlNode(Node):
 
             ail_cmd = float(np.clip(ail_cmd, -self.param.da_max, self.param.da_max))
 
-        elif (
-            self.roll_mode == "phi_stick"
-        ):  # heading error -> desired bank -> aileron cmd
+        elif self.roll_mode == "phi_stick":
+            # heading error -> desired bank -> aileron cmd
             # Output bank stick directly (designed to command on real onboard gyro)
             # maps [-phi_lim, +phi_lim] -> [-1, +1]
             ail_cmd = float(np.clip(phi_des / self.phi_lim, -1.0, 1.0))
@@ -468,7 +481,7 @@ class AutoControlNode(Node):
             )
 
         if self.flight_mode == "airborne":
-            planner_v = 5.0
+            planner_v = 6.0
             K_V = 1.0
             des_a = K_V * (
                 planner_v - np.abs(self.actual_data["v_est"])
@@ -488,11 +501,19 @@ class AutoControlNode(Node):
 
             des_heading = float(SO3_321[0])
 
+            z_desired = self.ref_pose.pose.pose.position.z
+            z_cur = self.actual_data["z_est"]
+            z_err = z_cur - z_desired
+
+            des_gamma = np.clip(np.arctan(-z_err / planner_v), -np.pi / 4, np.pi / 4)
+            des_phi = float(SO3_321[2])
+
             self.ref_data = {
                 "des_v": planner_v,
-                "des_gamma": 0,
+                "des_gamma": des_gamma,
                 "des_heading": des_heading,
                 "des_a": des_a,
+                "des_phi": des_phi,
             }
 
             # print(self.actual_data)
@@ -520,9 +541,11 @@ class AutoControlNode(Node):
         v = np.linalg.norm([msg.linear.x, msg.linear.y, msg.linear.z])
         self.actual_data["v_est"] = v
 
-        eps = 1e-5
-        denom = max(v, eps)
-        gamma_new = np.arccos(np.clip(msg.linear.x / denom, -1.0, 1.0))
+        # eps = 1e-5
+        # denom = max(v, eps)
+        gamma_new = np.arctan(np.clip(msg.linear.z / msg.linear.x, -1.0, 1.0))
+
+        print("Gamma est", gamma_new)
 
         self.actual_data["gamma_est"] = gamma_new
 
