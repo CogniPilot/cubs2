@@ -48,6 +48,5 @@
     # Planning parameters
     planner:
       gate_sequence: [0, 1, 2, 4, 3, 1, 2, 4, 3, 1, 2, 4, 3, 0]
-      velocity: 5.0           # m/s - velocity along trajectory
       altitude: 2.0           # m - flight altitude
       heading_spacing: 20     # degrees between heading samples

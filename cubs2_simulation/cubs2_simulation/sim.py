@@ -16,7 +16,9 @@
 from beartype import beartype
 from builtin_interfaces.msg import Time
 import casadi as ca
+# from cubs2_dynamics.SportCub_casadi_sx import create_model
 from cubs2_dynamics.sportcub import sportcub
+# from cubs2_dynamics.alexPlane import sportcub
 from cubs2_msgs.msg import AircraftControl
 from cubs2_simulation.markers import create_force_arrow
 from cubs2_simulation.markers import create_moment_arc
@@ -121,6 +123,7 @@ class SimNode(Node):
 
         # Apply initial state (position, orientation, and control inputs)
         self.apply_initial_state()
+        # build_integrator()
 
         # Subscribe to control messages (published by virtual joystick,
         # gamepad, keyboard)

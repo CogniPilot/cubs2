@@ -112,13 +112,18 @@ class DubinsGatePlannerNode(Node):
         self.pose_pub = self.create_publisher(
             PoseWithCovarianceStamped, "reference_pose", 10
         )
+
+        self.pose_pub_ahead = self.create_publisher(
+            PoseWithCovarianceStamped, "reference_pose_ahead", 10
+        )
+
         self.relative_pose_position = np.array([0.0, 0.0, 0.0])
 
         # Timer — check at 30 Hz
         self.timer = self.create_timer(1.0 / 100.0, self.update_distance)
         self.dist = 0
 
-        self.speed_pub = self.create_publisher(Twist, "reference_speed", 10)
+        self.speed_pub = self.create_publisher(Twist, "reference_speed", 6)
 
     def update_distance(self):
         try:
@@ -496,6 +501,10 @@ class DubinsGatePlannerNode(Node):
             return
 
         velocity = self.get_parameter("planner.velocity").value
+        print("Veocity is")
+
+        self.get_logger().error(f"VELOCITY IS {velocity}")
+        print(velocity)
         g = 9.81  # gravity (m/s^2)
 
         # Add arc length and time to each point
@@ -582,6 +591,15 @@ class DubinsGatePlannerNode(Node):
         # Find the point at this time using binary search or linear
         # interpolation
         ref_point = self._interpolate_trajectory(trajectory_time)
+        ref_point1 = self._interpolate_trajectory(trajectory_time+0.01)
+
+
+        ahead_time = 0.0
+        ref_point_ahead = self._interpolate_trajectory(trajectory_time+ahead_time)
+
+        phi_dot = (ref_point1["bank"] - ref_point["bank"]) / 0.01
+        print(ref_point.keys())
+        psi_dot = ref_point["psi_dot"]
 
         if ref_point is None:
             return
@@ -624,8 +642,8 @@ class DubinsGatePlannerNode(Node):
         max_dist = self.get_parameter("max_distance").value
         pose.pose.covariance = [
             max_dist**2,
-            0,
-            0,
+            phi_dot,
+            psi_dot,
             0,
             0,
             0,
@@ -662,6 +680,85 @@ class DubinsGatePlannerNode(Node):
         ]
 
         self.pose_pub.publish(pose)
+
+
+        # Create and broadcast transform
+        t = TransformStamped()
+        t.header.stamp = current_time.to_msg()
+        t.header.frame_id = self.racecourse.frame_id
+        t.child_frame_id = 'ahead_frame'
+
+        t.transform.translation.x = ref_point_ahead["pos"][0]
+        t.transform.translation.y = ref_point_ahead["pos"][1]
+        t.transform.translation.z = ref_point_ahead["pos"][2]
+
+        # Convert orientation (roll, pitch, yaw) to quaternion
+        roll = ref_point_ahead["bank"]
+        pitch = 0.0
+        yaw = ref_point_ahead["psi"]
+
+        ref_speed = self.get_parameter("planner.velocity").value
+
+        q = quaternion_from_euler(roll, pitch, yaw)
+        t.transform.rotation.x = q[0]
+        t.transform.rotation.y = q[1]
+        t.transform.rotation.z = q[2]
+        t.transform.rotation.w = q[3]
+
+        self.tf_broadcaster.sendTransform(t)
+
+
+        pose_ahead = PoseWithCovarianceStamped()
+        pose_ahead.header = t.header
+        pose_ahead.pose.pose.position.x = ref_point_ahead["pos"][0]
+        pose_ahead.pose.pose.position.y = ref_point_ahead["pos"][1]
+        pose_ahead.pose.pose.position.z = ref_point_ahead["pos"][2]
+        pose_ahead.pose.pose.orientation.x = q[0]
+        pose_ahead.pose.pose.orientation.y = q[1]
+        pose_ahead.pose.pose.orientation.z = q[2]
+        pose_ahead.pose.pose.orientation.w = q[3]
+
+        max_dist = self.get_parameter("max_distance").value
+        pose_ahead.pose.covariance = [
+            max_dist**2,
+            phi_dot,
+            psi_dot,
+            0,
+            0,
+            0,
+            0,
+            max_dist**2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            max_dist**2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0.1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0.1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0.1,
+        ]
+
+        self.pose_pub_ahead.publish(pose_ahead)
 
         speed = Twist()
         speed.linear.x = ref_speed
@@ -710,8 +807,10 @@ class DubinsGatePlannerNode(Node):
 
         # Interpolate bank angle
         bank = p0["bank"] + alpha * (p1["bank"] - p0["bank"])
+        psi_dot = p0["psi_dot"] + alpha * (p1["psi_dot"] - p0["psi_dot"])
 
-        return {"pos": pos, "psi": psi, "bank": bank}
+
+        return {"pos": pos, "psi": psi, "bank": bank, "psi_dot": psi_dot}
 
     def publish_visualization(self):
         frame = self.racecourse.frame_id
