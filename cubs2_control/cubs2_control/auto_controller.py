@@ -3,6 +3,7 @@ from cubs2_msgs.msg import AircraftControl
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, TwistStamped
+from std_msgs import msg
 from std_msgs.msg import String
 from pathlib import Path
 import yaml
@@ -77,6 +78,8 @@ class AutoControlNode(Node):
             "des_heading": 0.0,
             "des_a": 0.0,
             "des_phi": 0.0,
+            "des_x": 0.0,
+            "des_y": 0.0,
         }
 
         # Store reference pose
@@ -87,7 +90,7 @@ class AutoControlNode(Node):
         self.flight_mode = "takeoff"
         self.dt = 0.01
         self.g = 9.81
-        self.thr_max = 7.5  # 4.5 #Maximum Thrust
+        self.thr_max = 7.5  # Maximum Thrust
 
         self.args = "sim"  # Vehicle selection
         this_file = Path(__file__).resolve()
@@ -144,7 +147,39 @@ class AutoControlNode(Node):
         self.trim_throttle = getattr(self.param, "trim_throttle", 0.0)
         self.trim_rudder = getattr(self.param, "trim_rudder", 0.0)
 
-        # self.get_logger().debug(f"Gains loaded from: {gain_path}")
+    def _l1_guidance(self, x, y, vx, vy, V, x_ref, y_ref, psi_ref, phi_ff):
+        """L1 nonlinear guidance law (Park et al. 2004).
+
+        Places the L1 point L1_dist ahead of the reference along its heading.
+        Lateral acceleration a_lat drives a bank angle command
+        that corrects both cross-track error and heading error simultaneously.
+
+        Returns phi_des, eta, a_lat, e_ct.
+        """
+        L1 = self.param.L1_dist
+
+        x_L1 = x_ref + L1 * np.cos(psi_ref)
+        y_L1 = y_ref + L1 * np.sin(psi_ref)
+
+        dx = x_L1 - x
+        dy = y_L1 - y
+
+        bearing = np.arctan2(dy, dx)
+        chi = np.arctan2(vy, vx)
+
+        # ENU frame: positive roll decreases chi, so eta is negated vs. NED derivation.
+        eta = _wrap_pi(chi - bearing)
+
+        V_safe = max(V, 0.5)
+        a_lat = 2.0 * V_safe**2 / L1 * np.sin(eta)
+
+        phi_L1 = np.arctan2(a_lat, self.g)
+        phi_des = self.param.K_phi_fb * phi_L1 + self.param.K_phi_ff * phi_ff
+
+        # Signed cross-track error (+ = left of path)
+        e_ct = -np.sin(psi_ref) * (x - x_ref) + np.cos(psi_ref) * (y - y_ref)
+
+        return phi_des, eta, a_lat, e_ct
 
     def compute_thrust_pitch(
         self, x, y, z, ref_data, vx_est, vy_est, vz_est, V_est, gamma_est, vdot_est
@@ -166,7 +201,7 @@ class AutoControlNode(Node):
         )
 
         # -------------------Desired Thrust-------------------#
-        # Specific energy rate error
+        # Thrust controls total specific energy (sum channel).
         error_norm_Es_dot = (r_gamma - gamma_est) + (r_V_dot - vdot_est) / self.g
         thrust_unsat = self.param.trim_thrust + self.weight * (
             self.param.K_thrustp * (gamma_est + vdot_est / self.g)
@@ -176,8 +211,6 @@ class AutoControlNode(Node):
         thrust = float(np.clip(thrust_unsat, 0.0, self.thr_max))
 
         # Thrust anti-windup
-        # If at upper limit and error > 0, integrating would push further into sat -> freeze integral.
-        # If at lower limit and error < 0, freeze integral.
         allow_I = True
         if thrust >= self.thr_max - 1e-9 and error_norm_Es_dot > 0.0:
             allow_I = False
@@ -193,7 +226,7 @@ class AutoControlNode(Node):
             )
 
         # -------------------Desired Pitch-------------------#
-        # Energy rate distribution term error
+        # Pitch controls energy distribution (difference channel).
         error_dist_term = (r_gamma - gamma_est) - (r_V_dot - vdot_est) / self.g
         pitch_unsat = (
             self.param.K_pitchi * self.error_dist_term_integral
@@ -279,18 +312,13 @@ class AutoControlNode(Node):
         # Throttle control: normalize thrust command
         thr_cmd = np.clip(ref_thrust / self.thr_max, 0.0, 1.0)
 
-        # Lateral heading control
-        chi = np.arctan2(vy_est, vx_est)
-        chi_ref = r_heading
-        chi_err = _wrap_pi(chi_ref - chi) * -1
-        if abs(chi_err) < self.chi_deadband:
-            chi_err = 0.0
-
-        chi_dot_des = self.param.k_chi * chi_err
-        Vg = max(V_est, 0.05)
-        phi_des = np.arctan2(Vg * chi_dot_des, self.g) + ref_data["des_phi"] # Add feed-forward from reference bank angle: TODO: check for this bypass in real vehicle
-
-        # self.get_logger().debug(f"Feedforward Phi: {ref_data['des_phi']:5.2f}, Bank from yaw: {np.arctan2(Vg * chi_dot_des, self.g):5.2f}")
+        # --- L1 Guidance (lateral outer loop) ---
+        phi_des, eta, a_lat, e_ct = self._l1_guidance(
+            x, y, vx_est, vy_est, V_est,
+            ref_data["des_x"], ref_data["des_y"],
+            r_heading, ref_data["des_phi"],
+        )
+        # self.get_logger().debug(f"L1 eta: {np.rad2deg(eta):5.1f} deg  e_ct: {e_ct:5.2f} m  a_lat: {a_lat:5.2f} m/s²")
 
         phi_des = float(np.clip(phi_des, -self.phi_lim, self.phi_lim))
         dphi_max = self.phi_dot_lim * self.dt
@@ -342,10 +370,9 @@ class AutoControlNode(Node):
             )
             ail_cmd = float(np.clip(ail_cmd, -1.0, 1.0))
 
-        # -------------- Coordinated Turn Control (Rudder) -------------- #
-        # Coordinated turn control (TODO: implement coordinated rudder control)
-        rud_cmd = 0
-        rud_cmd = np.clip(rud_cmd, -1, 1)
+        # Coordinated turn: r_des = g*tan(phi)/V drives beta to zero
+        r_coord = self.g * np.tan(np.clip(roll, -np.deg2rad(60), np.deg2rad(60))) / max(V_est, 1.0)
+        rud_cmd = float(np.clip(self.param.K_rud_coord * (r_coord - r_est), -1.0, 1.0))
 
         # Set control outputs
         self.aileron = ail_cmd
@@ -373,13 +400,14 @@ class AutoControlNode(Node):
             )
             self.flight_mode = new_mode
             flight_mode_msg.data = new_mode
-            
+
             # Reset controllers when entering takeoff mode
             if new_mode == "takeoff":
                 self._e_r_int = 0.0  # Reset yaw rate integrator
 
         if flight_mode_msg.data == "":
             flight_mode_msg.data = self.flight_mode
+        ####################################################################################
 
         self.time += self.dt
 
@@ -392,17 +420,14 @@ class AutoControlNode(Node):
             self.aileron = 0.0  # Wings-level during takeoff
 
             # Yaw rate control: maintain zero yaw rate using rudder
-            # Get current yaw rate (r_est in rad/s)
             r_est = self.actual_data.get("r_est", 0.0)
-            # Desired yaw rate is zero
-            e_r = 0.0 - r_est  # yaw rate error
-            
-            # Yaw rate PI controller
+            e_r = 0.0 - r_est
+
             self._e_r_int += e_r * self.dt
             self._e_r_int = float(
                 np.clip(self._e_r_int, -self._r_int_max, self._r_int_max)
             )
-            
+
             rud_cmd = (
                 self._K_r_p * e_r
                 + self._K_r_i * self._e_r_int
@@ -427,8 +452,7 @@ class AutoControlNode(Node):
 
         if self.flight_mode == "airborne":
             planner_v = 6.0
-            K_V = 1.0
-            des_a = K_V * (planner_v - np.abs(self.actual_data["v_est"]))
+            des_a = self.param.K_V * (planner_v - np.abs(self.actual_data["v_est"]))
 
             pose_q = np.array([
                 self.ref_pose.pose.pose.orientation.w,
@@ -440,12 +464,30 @@ class AutoControlNode(Node):
             SO3_pose = SO3Quat.elem(ca.horzcat(pose_q))
             SO3_321 = SO3EulerB321.from_Quat(SO3_pose).param
 
-            des_heading = float(SO3_321[0]) # Desired heading from reference TF
-            z_desired = self.ref_pose.pose.pose.position.z
-            z_cur = self.actual_data["z_est"]
-            z_err = z_cur - z_desired
-            des_gamma = np.clip(np.arctan(-z_err / planner_v), -np.pi / 4, np.pi / 4)
-            des_phi = float(SO3_321[2])
+            des_heading  = float(SO3_321[0])
+            des_pitch_ref = float(SO3_321[1])
+            des_phi      = float(SO3_321[2])
+
+            # Vertical cross-track error: correct z_desired for along-track offset so
+            # the altitude error is path-perpendicular regardless of whether the aircraft
+            # is ahead of or behind the reference point.
+            z_desired = float(self.ref_pose.pose.pose.position.z)
+            z_cur     = self.actual_data["z_est"]
+            x_cur     = self.actual_data["x_est"]
+            y_cur     = self.actual_data["y_est"]
+
+            s_along  = ((x_cur - float(self.ref_pose.pose.pose.position.x)) * np.cos(des_heading)
+                      + (y_cur - float(self.ref_pose.pose.pose.position.y)) * np.sin(des_heading))
+            z_err    = z_cur - (z_desired + s_along * np.tan(des_pitch_ref))
+
+            gamma_fb = np.arctan(-z_err / max(planner_v, 0.5))
+
+            # Longitudinal feedforward from reference pitch (gamma_ref approx theta_ref for small AoA)
+            gamma_ff = des_pitch_ref
+            des_gamma = np.clip(
+                self.param.K_gamma_fb * gamma_fb + self.param.K_gamma_ff * gamma_ff,
+                -np.pi / 4, np.pi / 4,
+            )
 
             self.ref_data = {
                 "des_v": planner_v,
@@ -453,6 +495,8 @@ class AutoControlNode(Node):
                 "des_heading": des_heading,
                 "des_a": des_a,
                 "des_phi": des_phi,
+                "des_x": float(self.ref_pose.pose.pose.position.x),
+                "des_y": float(self.ref_pose.pose.pose.position.y),
             }
 
             self.compute_control(self.ref_data, self.actual_data)
@@ -484,7 +528,9 @@ class AutoControlNode(Node):
         self.actual_data["v_est"] = v
 
         # Estimate flight path angle
-        gamma_new = np.arctan(np.clip(msg.linear.z / msg.linear.x, -1.0, 1.0))
+        # gamma_new = np.arctan(np.clip(msg.linear.z / msg.linear.x, -1.0, 1.0))
+        gamma_new = np.arctan2(msg.linear.z, np.sqrt(msg.linear.x**2 + msg.linear.y**2)) # TODO : Double check if this is correct by convention
+
         # self.get_logger().debug(f"Gamma: {gamma_new:.3f}")
         self.actual_data["gamma_est"] = gamma_new
 
@@ -493,11 +539,12 @@ class AutoControlNode(Node):
         self.actual_data["q_est"] = msg.angular.y
         self.actual_data["r_est"] = msg.angular.z
 
-        # TODO: (check) Low-pass filter for acceleration estimate
+        # Low-pass filter for acceleration estimate
         fc = 100.0
-        alpha = np.exp(-2 * np.pi * fc * self.dt)
-        vdot_new = v - self.prev_speed
-        self._lpf_many({"vdot": vdot_new}, alpha)
+        alpha = 1.0 - np.exp(-2 * np.pi * fc * self.dt)
+        vdot_raw = (v - self.prev_speed) / max(self.dt, 1e-6)
+        vdot_est = self._lpf("vdot", vdot_raw, alpha)
+        self.actual_data["vdot_est"] = float(vdot_est)
         self.prev_speed = v
 
     def actual_pose_callback(self, msg: PoseStamped):

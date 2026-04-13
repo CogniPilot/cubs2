@@ -21,16 +21,36 @@ trim_elevator: 0.1
 trim_throttle: 0.0
 trim_rudder: 0.0
 
-# --- Lateral Loop (Heading Control) ---
+# --- L1 Guidance (lateral outer loop) ---
+# L1_dist: lookahead distance [m].
+L1_dist: 5.0
+
+# --- Coordinated Turn (rudder) ---
+# K_rud_coord: proportional gain on yaw-rate error for β≈0 coordination.
+K_rud_coord: 0.15
+
+# --- Lateral Loop (Heading Control) --- [kept for 'direct' roll_mode fallback]
 K_deltap: 0.25
 K_deltai: 0.10
 K_deltad: 0.0
+
+# --- Speed Reference Feedthrough ---
+K_V: 2.0 # gain to convert speed error (m/s) to acceleration command (m/s²)
+
+# --- Feedforward blend weights (lateral phi + longitudinal gamma) ---
+# Manages the proportion of feedforward vs feedback in the control law.
+K_phi_fb:   1.0
+K_phi_ff:   1.0
+K_gamma_fb: 0.8
+K_gamma_ff: 0.2
 
 # --- Vehicle Parameters ---
 mass: 0.057
 
 # --- Lateral Roll Control (Stabilized Mode) ---
 k_chi: 1.20               # [1/s] maps heading error -> desired heading rate
+k_chi_d: 0.00             # [1] derivative damping on heading rate
+fc_chi: 10.0               # [Hz] chi-dot low-pass cutoff
 phi_lim_deg: 40.0         # bank limit
 phi_dot_lim_deg_s: 90.0   # optional slew on bank [deg/s]
 chi_deadband_deg: 1.0     # heading error deadband to fix oscillations [deg]
