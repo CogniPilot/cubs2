@@ -36,114 +36,6 @@ AttitudeRep = Literal["quat", "euler"]
 
 @explicit
 class _Base:
-    # # States
-    # # =========================================================
-    # p: float = state(3, [0, 0, 0], "position in earth frame ENU (m)")
-    # v: float = state(3, [0, 0, 0], "velocity in earth frame ENU (m/s)")
-    # w: float = state(3, [0, 0, 0], "angular velocity in body frame FLU (rad/s)")
-    # # rotation will be defined in subclasses
-
-    # # Inputs
-    # # =========================================================
-    # ail: float = input_var(desc="aileron (normalized -1 to 1)")
-    # elev: float = input_var(desc="elevator (normalized -1 to 1)")
-    # rud: float = input_var(desc="rudder (normalized -1 to 1)")
-    # thr: float = input_var(desc="throttle (normalized 0 to 1)")
-
-    # # Physical properties
-    # thr_max: float = param(0.30, desc="maximum thrust (N)")
-    # m: float = param(0.065, desc="mass (kg)")
-    # S: float = param(0.055, desc="wing area (m^2)")
-    # rho: float = param(1.225, desc="air density (kg/m^3)")
-    # g: float = param(9.81, desc="gravity (m/s^2)")
-
-    # # Inertias
-    # Jx: float = param(8.0e-4, desc="roll inertia (kg·m^2)")
-    # Jy: float = param(1.2e-3, desc="pitch inertia (kg·m^2)")
-    # Jz: float = param(1.8e-3, desc="yaw inertia (kg·m^2)")
-    # Jxz: float = param(1.0e-4, desc="product of inertia (kg·m^2)")
-
-    # # Geometry
-    # cbar: float = param(0.09, desc="mean chord (m)")
-    # span: float = param(0.617, desc="wingspan (m)")
-    # wing_incidence: float = param(
-    #     np.deg2rad(2.0), desc="wing incidence angle (rad)"
-    # )  # Verify
-
-    # # Pitch coefficients
-    # Cm0: float = param(0.0, desc="pitch moment coeff")
-    # Cma: float = param(-0.8, desc="pitch moment slope (1/rad)")
-    # Cmq: float = param(-12.0, desc="pitch damping (1/rad)")
-
-    # # Lift & drag
-    # CL0: float = param(0.5, desc="lift coeff at zero AoA")
-    # CLa: float = param(4.7, desc="lift slope (1/rad)")
-    # CD0: float = param(0.06, desc="parasitic drag")
-    # k_ind: float = param(0.09, desc="induced drag factor")
-    # CD0_fp: float = param(0.30, desc="flat plate drag")
-    # CY_fp: float = param(0.50, desc="flat plate sideforce")
-
-    # # Control effectiveness
-    # Clda: float = param(0.05, desc="aileron roll (1/rad)")
-    # Cldr: float = param(0.006, desc="rudder roll (1/rad)")
-    # Cmde: float = param(0.3, desc="elevator pitch (1/rad)")
-    # Cndr: float = param(0.015, desc="rudder yaw (1/rad)")
-    # Cnda: float = param(0.006, desc="aileron yaw (1/rad)")
-    # CYda: float = param(0.004, desc="aileron sideforce (1/rad)")
-    # CYdr: float = param(-0.015, desc="rudder sideforce (1/rad)")
-
-    # # Stability & damping
-    # Cnb: float = param(0.06, desc="yaw stiffness (1/rad)")
-    # CYb: float = param(-0.50, desc="sideslip sideforce (1/rad)")
-    # CYr: float = param(0.20, desc="yaw rate sideforce")
-    # CYp: float = param(-0.15, desc="roll rate sideforce")
-    # Clb: float = param(-0.25, desc="dihedral effect (1/rad)")
-    # Clp: float = param(-0.50, desc="roll damping")
-    # Clr: float = param(0.15, desc="yaw-roll coupling")
-    # Cnr: float = param(-0.15, desc="yaw damping")
-    # Cnp: float = param(0.010, desc="roll-yaw coupling")
-
-    # # Limits
-    # blend_width: float = param(np.deg2rad(5), desc="stall blend width (rad)")
-    # max_defl_ail: float = param(np.deg2rad(30), desc="max aileron (rad)")
-    # max_defl_elev: float = param(np.deg2rad(24), desc="max elevator (rad)")
-    # max_defl_rud: float = param(np.deg2rad(20), desc="max rudder (rad)")
-    # alpha_stall: float = param(np.deg2rad(20), desc="stall AoA (rad)")
-
-    # disable_aero: float = param(0.0, desc="disable aero (debug)")
-    # disable_gf: float = param(0.0, desc="disable ground forces (debug)")
-
-    # # Ground contact
-    # ground_wn: float = param(350.0, desc="ground frequency (rad/s)")
-    # ground_zeta: float = param(0.6, desc="ground damping ratio")
-    # ground_c_xy: float = param(0.05, desc="lateral damping (N·s/m)")
-    # ground_mu: float = param(0.15, desc="friction coefficient")
-    # ground_max_force_per_wheel: float = param(
-    #     20.0, desc="max normal force per wheel (N)"
-    # )
-    # tailwheel_steer_gain: float = param(
-    #     0.03, desc="tail wheel steering effectiveness (moment/rad)"
-    # )
-
-    # # Outputs
-    # # =========================================================
-    # Vt: float = output_var(desc="airspeed (m/s)")
-    # alpha: float = output_var(desc="angle of attack (rad)")
-    # beta: float = output_var(desc="sideslip (rad)")
-    # qbar: float = output_var(desc="dynamic pressure (Pa)")
-    # q: float = output_var(4, desc="quaternion (w,x,y,z) for ROS2 compatibility")
-    # CL: float = output_var(desc="lift coefficient")
-    # CD: float = output_var(desc="drag coefficient")
-    # FA_b: float = output_var(3, desc="aero force body (N)")
-    # FG_b: float = output_var(3, desc="ground force body (N)")
-    # FT_b: float = output_var(3, desc="thrust force body (N)")
-    # FW_b: float = output_var(3, desc="weight force body (N)")
-    # F_b: float = output_var(3, desc="total force body (N)")
-    # MA_b: float = output_var(3, desc="aero moment body (N·m)")
-    # MG_b: float = output_var(3, desc="ground moment body (N·m)")
-    # MT_b: float = output_var(3, desc="thrust moment body (N·m)")
-    # MW_b: float = output_var(3, desc="weight moment body (N·m)")
-    # M_b: float = output_var(3, desc="total moment body (N·m)")
     # States
     # =========================================================
     p: float = state(3, [0, 0, 0], "position in earth frame ENU (m)")
@@ -159,79 +51,71 @@ class _Base:
     thr: float = input_var(desc="throttle (normalized 0 to 1)")
 
     # Physical properties
-    thr_max: float = param(1.55 * 9.81*0.6, desc="maximum thrust (N)") # What is this
-    m: float = param(1.55, desc="mass (kg)")
-    S: float = param(0.68, desc="wing area (m^2)")
+    thr_max: float = param(0.30, desc="maximum thrust (N)")
+    m: float = param(0.065, desc="mass (kg)")
+    S: float = param(0.055, desc="wing area (m^2)")
     rho: float = param(1.225, desc="air density (kg/m^3)")
     g: float = param(9.81, desc="gravity (m/s^2)")
 
     # Inertias
-    Jx: float = param(0.1521, desc="roll inertia (kg·m^2)")
-    Jy: float = param(0.2257, desc="pitch inertia (kg·m^2)")
-    Jz: float = param(0.3728, desc="yaw inertia (kg·m^2)")
-    Jxz: float = param(0.00626, desc="product of inertia (kg·m^2)")
+    Jx: float = param(8.0e-4, desc="roll inertia (kg·m^2)")
+    Jy: float = param(1.2e-3, desc="pitch inertia (kg·m^2)")
+    Jz: float = param(1.8e-3, desc="yaw inertia (kg·m^2)")
+    Jxz: float = param(1.0e-4, desc="product of inertia (kg·m^2)")
 
     # Geometry
-    cbar: float = param(0.342, desc="mean chord (m)")
-    span: float = param(2, desc="wingspan (m)")
+    cbar: float = param(0.09, desc="mean chord (m)")
+    span: float = param(0.617, desc="wingspan (m)")
     wing_incidence: float = param(
-        np.deg2rad(0.0), desc="wing incidence angle (rad)"
+        np.deg2rad(2.0), desc="wing incidence angle (rad)"
     )  # Verify
 
     # Pitch coefficients
-    Cm0: float = param(0.04, desc="pitch moment coeff")
-    Cma: float = param(-0.48, desc="pitch moment slope (1/rad)")
-    Cmq: float = param(-10.58, desc="pitch damping (1/rad)")
+    Cm0: float = param(0.0, desc="pitch moment coeff")
+    Cma: float = param(-0.8, desc="pitch moment slope (1/rad)")
+    Cmq: float = param(-12.0, desc="pitch damping (1/rad)")
 
     # Lift & drag
-    CL0: float = param(0.3, desc="lift coeff at zero AoA")
-    CLa: float = param(4.79, desc="lift slope (1/rad)")
-    CD0: float = param(0.04, desc="parasitic drag")
-    k_ind: float = param(0.0783, desc="induced drag factor")
-    CD0_fp: float = param(0.30, desc="flat plate drag") # What is this
-    CY_fp: float = param(0.50, desc="flat plate sideforce") # What is this
+    CL0: float = param(0.5, desc="lift coeff at zero AoA")
+    CLa: float = param(4.7, desc="lift slope (1/rad)")
+    CD0: float = param(0.06, desc="parasitic drag")
+    k_ind: float = param(0.09, desc="induced drag factor")
+    CD0_fp: float = param(0.30, desc="flat plate drag")
+    CY_fp: float = param(0.50, desc="flat plate sideforce")
+
     # Control effectiveness
-    Clda: float = param(0.05, desc="aileron roll (1/rad)") 
+    Clda: float = param(0.05, desc="aileron roll (1/rad)")
     Cldr: float = param(0.006, desc="rudder roll (1/rad)")
     Cmde: float = param(0.3, desc="elevator pitch (1/rad)")
     Cndr: float = param(0.015, desc="rudder yaw (1/rad)")
-    Cnda: float = param(0.02, desc="aileron yaw (1/rad)")
+    Cnda: float = param(0.006, desc="aileron yaw (1/rad)")
     CYda: float = param(0.004, desc="aileron sideforce (1/rad)")
     CYdr: float = param(-0.015, desc="rudder sideforce (1/rad)")
 
     # Stability & damping
-    Cnb: float = param(0.1086, desc="yaw stiffness (1/rad)")
-    CYb: float = param(-0.23, desc="sideslip sideforce (1/rad)")
-    CYr: float = param(0.278, desc="yaw rate sideforce")
-    CYp: float = param(0.028035, desc="roll rate sideforce")
-    Clb: float = param(-0.0486, desc="dihedral effect (1/rad)")
-    Clp: float = param(-0.346, desc="roll damping")
-    Clr: float = param(-0.00305, desc="yaw-roll coupling")
-    Cnr: float = param(-0.132, desc="yaw damping")
-    Cnp: float = param(-0.0146, desc="roll-yaw coupling")
-    Cnb: float = param(0.108, desc="yaw stiffness (1/rad)")
-    CYb: float = param(-0.23, desc="sideslip sideforce (1/rad)")
-    CYr: float = param(0.278, desc="yaw rate sideforce")
-    CYp: float = param(0.028, desc="roll rate sideforce") # maybe negative
-    Clb: float = param(-0.0486, desc="dihedral effect (1/rad)")
-    Clp: float = param(-0.346, desc="roll damping")
-    Clr: float = param(-0.00305, desc="yaw-roll coupling")
-    Cnr: float = param(-0.132, desc="yaw damping")
-    Cnp: float = param(0.0146, desc="roll-yaw coupling")
+    Cnb: float = param(0.06, desc="yaw stiffness (1/rad)")
+    CYb: float = param(-0.50, desc="sideslip sideforce (1/rad)")
+    CYr: float = param(0.20, desc="yaw rate sideforce")
+    CYp: float = param(-0.15, desc="roll rate sideforce")
+    Clb: float = param(-0.25, desc="dihedral effect (1/rad)")
+    Clp: float = param(-0.50, desc="roll damping")
+    Clr: float = param(0.15, desc="yaw-roll coupling")
+    Cnr: float = param(-0.15, desc="yaw damping")
+    Cnp: float = param(0.010, desc="roll-yaw coupling")
 
     # Limits
     blend_width: float = param(np.deg2rad(5), desc="stall blend width (rad)")
     max_defl_ail: float = param(np.deg2rad(30), desc="max aileron (rad)")
-    max_defl_elev: float = param(np.deg2rad(30), desc="max elevator (rad)")
-    max_defl_rud: float = param(np.deg2rad(30), desc="max rudder (rad)")
+    max_defl_elev: float = param(np.deg2rad(24), desc="max elevator (rad)")
+    max_defl_rud: float = param(np.deg2rad(20), desc="max rudder (rad)")
     alpha_stall: float = param(np.deg2rad(20), desc="stall AoA (rad)")
 
     disable_aero: float = param(0.0, desc="disable aero (debug)")
     disable_gf: float = param(0.0, desc="disable ground forces (debug)")
 
     # Ground contact
-    ground_wn: float = param(20.0, desc="ground frequency (rad/s)")
-    ground_zeta: float = param(0.2, desc="ground damping ratio")
+    ground_wn: float = param(350.0, desc="ground frequency (rad/s)")
+    ground_zeta: float = param(0.6, desc="ground damping ratio")
     ground_c_xy: float = param(0.05, desc="lateral damping (N·s/m)")
     ground_mu: float = param(0.15, desc="friction coefficient")
     ground_max_force_per_wheel: float = param(
@@ -260,6 +144,122 @@ class _Base:
     MT_b: float = output_var(3, desc="thrust moment body (N·m)")
     MW_b: float = output_var(3, desc="weight moment body (N·m)")
     M_b: float = output_var(3, desc="total moment body (N·m)")
+    # # States
+    # # =========================================================
+    # p: float = state(3, [0, 0, 0], "position in earth frame ENU (m)")
+    # v: float = state(3, [0, 0, 0], "velocity in earth frame ENU (m/s)")
+    # w: float = state(3, [0, 0, 0], "angular velocity in body frame FLU (rad/s)")
+    # # rotation will be defined in subclasses
+
+    # # Inputs
+    # # =========================================================
+    # ail: float = input_var(desc="aileron (normalized -1 to 1)")
+    # elev: float = input_var(desc="elevator (normalized -1 to 1)")
+    # rud: float = input_var(desc="rudder (normalized -1 to 1)")
+    # thr: float = input_var(desc="throttle (normalized 0 to 1)")
+
+    # # Physical properties
+    # thr_max: float = param(1.55 * 9.81*0.6, desc="maximum thrust (N)") # What is this
+    # m: float = param(1.55, desc="mass (kg)")
+    # S: float = param(0.68, desc="wing area (m^2)")
+    # rho: float = param(1.225, desc="air density (kg/m^3)")
+    # g: float = param(9.81, desc="gravity (m/s^2)")
+
+    # # Inertias
+    # Jx: float = param(0.1521, desc="roll inertia (kg·m^2)")
+    # Jy: float = param(0.2257, desc="pitch inertia (kg·m^2)")
+    # Jz: float = param(0.3728, desc="yaw inertia (kg·m^2)")
+    # Jxz: float = param(0.00626, desc="product of inertia (kg·m^2)")
+
+    # # Geometry
+    # cbar: float = param(0.342, desc="mean chord (m)")
+    # span: float = param(2, desc="wingspan (m)")
+    # wing_incidence: float = param(
+    #     np.deg2rad(0.0), desc="wing incidence angle (rad)"
+    # )  # Verify
+
+    # # Pitch coefficients
+    # Cm0: float = param(0.04, desc="pitch moment coeff")
+    # Cma: float = param(-0.48, desc="pitch moment slope (1/rad)")
+    # Cmq: float = param(-10.58, desc="pitch damping (1/rad)")
+
+    # # Lift & drag
+    # CL0: float = param(0.3, desc="lift coeff at zero AoA")
+    # CLa: float = param(4.79, desc="lift slope (1/rad)")
+    # CD0: float = param(0.04, desc="parasitic drag")
+    # k_ind: float = param(0.0783, desc="induced drag factor")
+    # CD0_fp: float = param(0.30, desc="flat plate drag") # What is this
+    # CY_fp: float = param(0.50, desc="flat plate sideforce") # What is this
+    # # Control effectiveness
+    # Clda: float = param(0.05, desc="aileron roll (1/rad)") 
+    # Cldr: float = param(0.006, desc="rudder roll (1/rad)")
+    # Cmde: float = param(0.3, desc="elevator pitch (1/rad)")
+    # Cndr: float = param(0.015, desc="rudder yaw (1/rad)")
+    # Cnda: float = param(0.02, desc="aileron yaw (1/rad)")
+    # CYda: float = param(0.004, desc="aileron sideforce (1/rad)")
+    # CYdr: float = param(-0.015, desc="rudder sideforce (1/rad)")
+
+    # # Stability & damping
+    # Cnb: float = param(0.1086, desc="yaw stiffness (1/rad)")
+    # CYb: float = param(-0.23, desc="sideslip sideforce (1/rad)")
+    # CYr: float = param(0.278, desc="yaw rate sideforce")
+    # CYp: float = param(0.028035, desc="roll rate sideforce")
+    # Clb: float = param(-0.0486, desc="dihedral effect (1/rad)")
+    # Clp: float = param(-0.346, desc="roll damping")
+    # Clr: float = param(-0.00305, desc="yaw-roll coupling")
+    # Cnr: float = param(-0.132, desc="yaw damping")
+    # Cnp: float = param(-0.0146, desc="roll-yaw coupling")
+    # Cnb: float = param(0.108, desc="yaw stiffness (1/rad)")
+    # CYb: float = param(-0.23, desc="sideslip sideforce (1/rad)")
+    # CYr: float = param(0.278, desc="yaw rate sideforce")
+    # CYp: float = param(0.028, desc="roll rate sideforce") # maybe negative
+    # Clb: float = param(-0.0486, desc="dihedral effect (1/rad)")
+    # Clp: float = param(-0.346, desc="roll damping")
+    # Clr: float = param(-0.00305, desc="yaw-roll coupling")
+    # Cnr: float = param(-0.132, desc="yaw damping")
+    # Cnp: float = param(0.0146, desc="roll-yaw coupling")
+
+    # # Limits
+    # blend_width: float = param(np.deg2rad(5), desc="stall blend width (rad)")
+    # max_defl_ail: float = param(np.deg2rad(30), desc="max aileron (rad)")
+    # max_defl_elev: float = param(np.deg2rad(30), desc="max elevator (rad)")
+    # max_defl_rud: float = param(np.deg2rad(30), desc="max rudder (rad)")
+    # alpha_stall: float = param(np.deg2rad(20), desc="stall AoA (rad)")
+
+    # disable_aero: float = param(0.0, desc="disable aero (debug)")
+    # disable_gf: float = param(0.0, desc="disable ground forces (debug)")
+
+    # # Ground contact
+    # ground_wn: float = param(20.0, desc="ground frequency (rad/s)")
+    # ground_zeta: float = param(0.2, desc="ground damping ratio")
+    # ground_c_xy: float = param(0.05, desc="lateral damping (N·s/m)")
+    # ground_mu: float = param(0.15, desc="friction coefficient")
+    # ground_max_force_per_wheel: float = param(
+    #     20.0, desc="max normal force per wheel (N)"
+    # )
+    # tailwheel_steer_gain: float = param(
+    #     0.03, desc="tail wheel steering effectiveness (moment/rad)"
+    # )
+
+    # # Outputs
+    # # =========================================================
+    # Vt: float = output_var(desc="airspeed (m/s)")
+    # alpha: float = output_var(desc="angle of attack (rad)")
+    # beta: float = output_var(desc="sideslip (rad)")
+    # qbar: float = output_var(desc="dynamic pressure (Pa)")
+    # q: float = output_var(4, desc="quaternion (w,x,y,z) for ROS2 compatibility")
+    # CL: float = output_var(desc="lift coefficient")
+    # CD: float = output_var(desc="drag coefficient")
+    # FA_b: float = output_var(3, desc="aero force body (N)")
+    # FG_b: float = output_var(3, desc="ground force body (N)")
+    # FT_b: float = output_var(3, desc="thrust force body (N)")
+    # FW_b: float = output_var(3, desc="weight force body (N)")
+    # F_b: float = output_var(3, desc="total force body (N)")
+    # MA_b: float = output_var(3, desc="aero moment body (N·m)")
+    # MG_b: float = output_var(3, desc="ground moment body (N·m)")
+    # MT_b: float = output_var(3, desc="thrust moment body (N·m)")
+    # MW_b: float = output_var(3, desc="weight moment body (N·m)")
+    # M_b: float = output_var(3, desc="total moment body (N·m)")
 
 
 @explicit

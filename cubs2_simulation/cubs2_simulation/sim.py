@@ -30,6 +30,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rosgraph_msgs.msg import Clock
+from sensor_msgs.msg import Imu
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
 from std_msgs.msg import ColorRGBA
@@ -84,6 +85,8 @@ class SimNode(Node):
         self.velocity_publisher = self.create_publisher(
             TwistStamped, "/sportcub/velocity", 10
         )
+        self.imu_publisher = self.create_publisher(Imu, "/sportcub/imu", 10)
+        self.imu_frame_id = "vehicle"
 
         self.reset_subscription = self.create_subscription(
             Empty, "/reset", self.reset_topic_callback, 10
@@ -148,6 +151,9 @@ class SimNode(Node):
 
         # Propeller rotation state
         self.propeller_angle = 0.0
+
+        # Previous body-frame velocity for finite-difference accel estimate.
+        self.prev_body_vel = np.zeros(3)
 
         # Initialize to running state
         self.resume()
@@ -310,6 +316,7 @@ class SimNode(Node):
         self.aircraft.v0.v[0] = 0.0
         self.aircraft.v0.v[1] = 0.0
         self.aircraft.v0.v[2] = 0.0
+        self.prev_body_vel = np.zeros(3)
 
         # Set attitude quaternion
         self.aircraft.v0.r[0] = qw
@@ -402,6 +409,62 @@ class SimNode(Node):
         velocity_msg.twist.angular.y = w[1]
         velocity_msg.twist.angular.z = w[2]
         self.velocity_publisher.publish(velocity_msg)
+
+        # Publish fake IMU from truth state.
+        imu_msg = Imu()
+        imu_msg.header.stamp = stamp
+        imu_msg.header.frame_id = self.imu_frame_id
+        imu_msg.orientation.w = q[0]
+        imu_msg.orientation.x = q[1]
+        imu_msg.orientation.y = q[2]
+        imu_msg.orientation.z = q[3]
+        imu_msg.angular_velocity.x = w[0]
+        imu_msg.angular_velocity.y = w[1]
+        imu_msg.angular_velocity.z = w[2]
+
+        # Finite-difference body acceleration as a simple fake accelerometer.
+        dt_safe = max(self.dt, 1e-6)
+        body_accel = (vel - self.prev_body_vel) / dt_safe
+        self.prev_body_vel = vel.copy()
+        imu_msg.linear_acceleration.x = body_accel[0]
+        imu_msg.linear_acceleration.y = body_accel[1]
+        imu_msg.linear_acceleration.z = body_accel[2]
+
+        # Small fixed covariances for downstream filters expecting non-zero values.
+        imu_msg.orientation_covariance = [
+            1e-4,
+            0.0,
+            0.0,
+            0.0,
+            1e-4,
+            0.0,
+            0.0,
+            0.0,
+            1e-4,
+        ]
+        imu_msg.angular_velocity_covariance = [
+            1e-3,
+            0.0,
+            0.0,
+            0.0,
+            1e-3,
+            0.0,
+            0.0,
+            0.0,
+            1e-3,
+        ]
+        imu_msg.linear_acceleration_covariance = [
+            5e-2,
+            0.0,
+            0.0,
+            0.0,
+            5e-2,
+            0.0,
+            0.0,
+            0.0,
+            5e-2,
+        ]
+        self.imu_publisher.publish(imu_msg)
 
     @beartype
     def pause(self) -> None:

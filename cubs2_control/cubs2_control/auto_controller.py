@@ -3,6 +3,7 @@ from cubs2_msgs.msg import AircraftControl
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped, TwistStamped
+from sensor_msgs.msg import Imu
 from std_msgs.msg import String
 from pathlib import Path
 from cubs2_dynamics.sportcub import sportcub
@@ -13,8 +14,6 @@ import casadi as ca
 from cyecca.lie import SO3Quat, SO3EulerB321
 from tf2_ros import Buffer, TransformListener
 from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
-def _wrap_pi(a):
-    return np.arctan2(np.sin(a), np.cos(a))
 
 
 class AutoControlNode(Node):
@@ -37,6 +36,9 @@ class AutoControlNode(Node):
         self.trim_throttle = 0.0
         self.trim_rudder = 0.0
 
+
+        self.TW = 0.47 # Thrust to weight ratio
+
         # Reference trajectory subscriber
         self.ref_pose_sub = self.create_subscription(
             PoseWithCovarianceStamped,
@@ -53,6 +55,10 @@ class AutoControlNode(Node):
         self.velocity_sub = self.create_subscription(
             TwistStamped, "/sportcub/velocity", self.speed_callback, 10
         )
+        self.imu_sub = self.create_subscription(
+            Imu, "/sportcub/imu", self.imu_callback, 10
+        )
+        self.imu_received = False
 
         self.actual_data = {
             "x_est": 0.0,
@@ -70,6 +76,10 @@ class AutoControlNode(Node):
             "p_est": 0.0,
             "q_est": 0.0,
             "r_est": 0.0,
+            "beta_est": 0.0,
+            "ax_est": 0.0,
+            "ay_est": 0.0,
+            "az_est": 0.0,
         }
 
         self.ref_data = {
@@ -78,7 +88,9 @@ class AutoControlNode(Node):
             "des_heading": 0.0,
             "des_a": 0.0,
             "des_phi": 0.0,
+            "des_phi_dot": 0.0,
             "des_psi_dot": 0.0,
+            "des_p": 0.0,
         }
 
         # Store reference pose
@@ -102,6 +114,9 @@ class AutoControlNode(Node):
         self.error_r_integral = 0
         self.error_r_last = 0
         self.error_xtrack_integral = 0
+
+        # Integrator for roll rate error in takeoff yaw control
+        self.p_integral = 0.0
 
         # Roll controller (options: "stabilized" | "phi_stick" | "direct")
         self.roll_mode = "stabilized"
@@ -284,171 +299,37 @@ class AutoControlNode(Node):
         q_est = actual_data["q_est"]
         r_est = actual_data["r_est"]
 
-        # Feed forwards 
-        ref_thrust, ref_alpha = self.get_T_alpha_desired(roll, ref_data['des_v'], ref_data['des_gamma'])
-        
-        throttle_ff = ref_thrust / self.thr_max
+        # Gains
+        K_phi = 2 # Proportional gain for roll angle error to roll rate command
+        K_p = 1 # Proportional gain for roll rate error to aileron command
+        K_i = 0.1 # Integral gain for roll rate error to aileron command
+        K_pff = 0.1 # Feed forward gain for roll rate from planner
 
-        # control gamma and v
-        # PID controllers for throttle (des_v) and elevator (des_gamma)
-        thr_error = ref_data['des_v'] - V_est
-        self.pid_thr_integral += thr_error * self.dt
-        thr_derivative = (thr_error - self.pid_thr_prev_error) / self.dt if self.dt > 0 else 0.0
-        self.pid_thr_prev_error = thr_error
-        thr_cmd = throttle_ff + self.pid_thr_kp * thr_error + self.pid_thr_ki * self.pid_thr_integral + self.pid_thr_kd * thr_derivative
-        
-        elv_error = ref_data['des_gamma'] - gamma_est
-        self.pid_elv_integral += elv_error * self.dt
-        elv_derivative = (elv_error - self.pid_elv_prev_error) / self.dt if self.dt > 0 else 0.0
-        self.pid_elv_prev_error = elv_error
-        elv_cmd = self.pid_elv_kp * elv_error + self.pid_elv_ki * self.pid_elv_integral + self.pid_elv_kd * elv_derivative
+        K_ay = 0.5
 
+        # Turn outer loop
+        print("--- Control Computation ---")
+        print("des_phi: %.2f deg" % np.rad2deg(ref_data['des_phi']))
+        phi_err = ref_data['des_phi'] - roll
 
+        # inner loop 
+        p_cmd = K_phi * phi_err
+        # Simple P controller for aileron
 
-        # # -------------------Compute Reference Outer Loop and Heading------------------#
-        # # Get desired thrust and pitch (we can remove this if we want to fully separate the two functions during implementation)
-        # if ref_thrust == None or ref_pitch == None:
-        #     ref_thrust, ref_pitch = self.compute_thrust_pitch(
-        #         x, y, z, ref_data, vx_est, vy_est, vz_est, V_est, gamma_est, vdot_est
-        #     )  # Outer loop TECS controller
-        # ref_thrust, ref_pitch = self.get_T_alpha_desired(roll, ref_data['des_v'], ref_data['des_gamma'])
+        PID_p_err = p_cmd - p_est
 
-        # # print(ref_thrust, ref_pitch)
+        self.p_integral = self.p_integral + PID_p_err * self.dt
 
-        # r_heading = ref_data["des_heading"]
+        ail_cmd = (K_p * (p_cmd - p_est) + K_i * self.p_integral +  K_pff * ref_data['des_p'])  # Add feed-forward from planner
 
-        # # Elevator control: compute errors
-        # pitch = -1 * pitch
-        # error_pitch = _wrap_pi(ref_pitch - pitch)
+        elv_cmd = 0.1
+        thr_cmd = 0.4
+        rud_cmd = -K_ay * actual_data['ay_est']
 
-        # q_turn = np.sin(roll) * np.cos(pitch) * np.tan(roll) * self.g / V_est
-        # error_q = q_turn - q_est  # turning pitch
-        # error_q = (error_q + np.pi) % (2 * np.pi) - np.pi
+        print(f"ay_est: {actual_data['ay_est']:.2f} m/s^2")
 
-        # nz_excess = (1.0 / np.cos(roll)) - 1.0  # Steady-turn feed-forward
-        # ele_ff_phi = self.param.K_phi_elev * nz_excess
+        print(f"phi_err: {np.rad2deg(phi_err):.2f} deg, p_err {np.rad2deg(p_cmd - p_est):.2f} deg/s, ail_cmd: {ail_cmd:.3f}")
 
-        # # Integral of pitch error
-        # self.error_pitch_integral += error_pitch * self.dt
-        # if self.error_pitch_integral > self.param.pitch_integral_max:
-        #     self.error_pitch_integral = self.param.pitch_integral_max
-        # elif self.error_pitch_integral < -self.param.pitch_integral_max:
-        #     self.error_pitch_integral = -self.param.pitch_integral_max
-
-        # # Control commands for elevator
-        # elev_cmd = (
-        #     self.param.trim_elevator
-        #     + (
-        #         self.param.K_elevp * error_pitch
-        #         + self.param.K_elevi * self.error_pitch_integral
-        #     )
-        #     + self.param.K_q * error_q
-        # )
-        # elev_cmd += ele_ff_phi  # feed-forward elevator wrt to roll angle
-        # elev_cmd = np.clip(elev_cmd, -1, 1)  # Saturation
-
-        # # Throttle control: normalize thrust command
-        # thr_cmd = np.clip(ref_thrust / self.thr_max, 0.0, 1.0)
-
-        # # Lateral heading control
-        # chi = np.arctan2(vy_est, vx_est)
-        # chi_ref = r_heading
-        # chi_err = _wrap_pi(chi_ref - chi) * -1
-        # if abs(chi_err) < self.chi_deadband:
-        #     chi_err = 0.0
-
-
-        # transform = self.tf_buffer.lookup_transform(
-        #     "reference",  # target frame
-        #     "error_relative_to_reference",  # source frame
-        #     rclpy.time.Time(),
-        # )
-        # cross_track = transform.transform.translation.y
-
-        # phi_xt = cross_track*np.deg2rad(10)/100
-
-        # chi_dot_des = self.param.k_chi * chi_err
-        # Vg = max(V_est, 0.05)
-
-        # phi_ff = -np.arctan2(V_est * ref_data["des_psi_dot"], self.g)
-
-        # print("Feed forward")
-        # print(phi_ff)
-        # print(ref_data["des_phi"])
-
-        # phi_des = phi_ff + np.arctan2(Vg * chi_dot_des, self.g) #+ phi_xt # Add feed-forward from reference bank angle: TODO: check for this bypass in real vehicle
-
-        # # self.get_logger().debug(f"Feedforward Phi: {ref_data['des_phi']:5.2f}, Bank from yaw: {np.arctan2(Vg * chi_dot_des, self.g):5.2f}")
-
-        # phi_des = float(np.clip(phi_des, -self.phi_lim, self.phi_lim))
-        # dphi_max = self.phi_dot_lim * self.dt
-        # phi_des = np.clip(phi_des - self._phi_cmd, -dphi_max, dphi_max) + self._phi_cmd
-        # self._phi_cmd = float(np.clip(phi_des, -self.phi_lim, self.phi_lim))
-
-        # # Inner loop roll control
-        # if self.roll_mode == "stabilized":
-        #     # Roll stabilizer: PD on (phi, p) -> aileron
-        #     e_phi = _wrap_pi(self._phi_cmd - roll)
-        #     # Integrator with clamp
-        #     self._e_phi_int += e_phi * self.dt
-        #     self._e_phi_int = float(
-        #         np.clip(self._e_phi_int, -self.param.i_phi_max, self.param.i_phi_max)
-        #     )
-
-        #     # Damping on measured roll-rate
-        #     d_term = -self.param.K_phi_d * p_est
-
-        #     ail_cmd = (
-        #         self.param.trim_aileron
-        #         + self.param.K_phi_p * e_phi
-        #         + self.param.K_phi_i * self._e_phi_int
-        #         + d_term
-        #     )
-
-        #     ail_cmd = float(np.clip(ail_cmd, -self.param.da_max, self.param.da_max))
-
-        # elif self.roll_mode == "phi_stick":
-        #     # Direct bank angle command (for onboard gyro)
-        #     ail_cmd = float(np.clip(phi_des / self.phi_lim, -1.0, 1.0))
-
-        # # else:  # "direct" mode: yaw error -> aileron
-        #     err_yaw = r_heading - yaw
-        #     err_yaw = (err_yaw + np.pi) % (2 * np.pi) - np.pi
-        #     error_r_deriv = (err_yaw - self.error_r_last) / self.dt
-        #     self.error_r_last = err_yaw
-        #     self.error_r_integral += err_yaw * self.dt
-        #     if self.error_r_integral > self.param.r_integral_max:
-        #         self.error_r_integral = self.param.r_integral_max
-        #     elif self.error_r_integral < -self.param.r_integral_max:
-        #         self.error_r_integral = -self.param.r_integral_max
-
-        #     ail_cmd = (
-        #         self.param.trim_ail
-        #         + self.param.K_deltap * err_yaw
-        #         + self.param.K_deltai * self.error_r_integral
-        #         + self.param.K_deltad * error_r_deriv
-        #     )
-        #     ail_cmd = float(np.clip(ail_cmd, -1.0, 1.0))
-
-        # # K_phi = 3/np.pi
-        # # K_da = 1
-
-        
-        # # print("HIII")
-        # # print(ref_data['des_phi_dot'])
-        # # print(ref_data['des_phi'])
-        # # print((ref_data['des_phi_dot'] + K_phi * ref_data['des_phi'])/ K_da)
-
-        # # ail_cmd = (ref_data['des_phi_dot'] + K_phi * ref_data['des_phi'])/ K_da
-
-        # # -------------- Coordinated Turn Control (Rudder) -------------- #
-        # # Coordinated turn control (TODO: implement coordinated rudder control)
-        # rud_cmd = 0#cross_track/20
-        # rud_cmd = np.clip(rud_cmd, -1, 1)
-
-        # Set control 
-        ail_cmd = 0.0  # Placeholder for aileron command from roll controller
-        rud_cmd = 0.0
         self.aileron = np.clip(ail_cmd, -1, 1)
         self.elevator = np.clip(elv_cmd, -1, 1)
         self.throttle = np.clip(thr_cmd, -1, 1)
@@ -527,10 +408,23 @@ class AutoControlNode(Node):
             )
 
         if self.flight_mode == "airborne":
-            planner_v = 6
-            K_V = 1.0
-            des_a = K_V * (planner_v - np.abs(self.actual_data["v_est"]))
 
+            ## CONSTANTS
+            # V
+            planner_v = 6.0 # Desired airspeed along trajectory (TODO - publish from planner)
+            
+            # gamma
+            K_rc = 0.5  # Rate of climb gain
+            max_gamma = np.deg2rad(30) # Maximum climb angle
+
+            # heading
+            # acceleration 
+            # bank angle
+            # bank anlge rate
+            # psi_dot
+
+
+            ## READ REFERENCE TRAJECTORY
             pose_q = np.array([
                 self.ref_pose.pose.pose.orientation.w,
                 self.ref_pose.pose.pose.orientation.x,
@@ -538,34 +432,65 @@ class AutoControlNode(Node):
                 self.ref_pose.pose.pose.orientation.z,
             ])
 
-            print(self.ref_pose.pose.covariance)
             ref_phi_dot = self.ref_pose.pose.covariance[1]
             ref_psi_dot = self.ref_pose.pose.covariance[2]
 
             SO3_pose = SO3Quat.elem(ca.horzcat(pose_q))
-            SO3_321 = SO3EulerB321.from_Quat(SO3_pose).param
+            eulers = SO3EulerB321.from_Quat(SO3_pose).param
+            ref_psi, ref_theta, ref_phi = float(eulers[0]), float(eulers[1]), float(eulers[2])
+            
+            ## REFERENCE GENERATION
+            # Reference velocity (straight from planner)
+            des_v = planner_v
 
-            des_heading = float(SO3_321[0]) # Desired heading from reference TF
-            z_desired = self.ref_pose.pose.pose.position.z
-            z_cur = self.actual_data["z_est"]
-            z_err = z_cur - z_desired
-            des_gamma = np.clip(np.arctan(-z_err / planner_v / 5), -np.pi / 4, np.pi / 4)
-            des_phi = float(SO3_321[2])
+            # Reference gamma
+            # RC = V sin(gamma) -> gamma = arcsin(RC / V)
+            RC_des = K_rc * (self.ref_pose.pose.pose.position.z - self.actual_data["z_est"])
+            des_gamma = ca.fmin(ca.arcsin(RC_des / self.actual_data["v_est"]), max_gamma)
 
+            # Reference Heading 
+            des_heading = ref_psi
+
+            # Reference acceleration (simple P controller on velocity error for now, can add feed-forward from planner if we want)
+            K_V = 1.0
+            des_a = K_V * (planner_v - np.abs(self.actual_data["v_est"]))
+
+            # Reference phi 
+            des_phi = ca.arctan(ref_psi_dot * self.actual_data["v_est"] / self.g - self.TW * ca.sin(self.actual_data['beta_est']))
+
+            des_p = ref_phi_dot - ref_psi_dot * ca.sin(self.actual_data["pitch_est"])
+
+            # Reference phi_dot and psi_dot (feed-forward from planner)
+            des_phi_dot = ref_phi_dot
+            des_psi_dot = ref_psi_dot 
+
+            # Test case
+            R = 8
+            des_psi_dot = self.actual_data["v_est"] / R
+            des_phi = ca.arctan(ref_psi_dot * self.actual_data["v_est"] / self.g - self.TW * ca.sin(self.actual_data['beta_est']))
+            des_p = 0
+            des_phi_dot = 0
+
+
+            des_v = 6.0 # m/s
+            des_heading = -1 # NA
+            
             self.ref_data = {
-                "des_v": planner_v,
-                "des_gamma": des_gamma,
-                "des_heading": des_heading,
-                "des_a": des_a,
-                "des_phi": des_phi,
-                "des_phi_dot": ref_phi_dot,
-                "des_psi_dot": ref_psi_dot
+                "des_v": des_v,#
+                "des_gamma": des_gamma, #
+                "des_heading": des_heading,#
+                "des_a": des_a,#
+                "des_phi": des_phi,#
+                "des_phi_dot": des_phi_dot,#
+                "des_psi_dot": des_psi_dot,#
+                "des_p": des_p, #
             }
 
             self.compute_control(self.ref_data, self.actual_data)
 
         msg = AircraftControl()
 
+        # send message
         msg.header.stamp = self.get_clock().now().to_msg()
         # Only apply trim in airborne mode
         if self.flight_mode == "takeoff":
@@ -595,10 +520,11 @@ class AutoControlNode(Node):
         # self.get_logger().debug(f"Gamma: {gamma_new:.3f}")
         self.actual_data["gamma_est"] = gamma_new
 
-        # Angular rates
-        self.actual_data["p_est"] = msg.angular.x
-        self.actual_data["q_est"] = msg.angular.y
-        self.actual_data["r_est"] = msg.angular.z
+        # Angular rates fall back to twist if IMU is unavailable.
+        if not self.imu_received:
+            self.actual_data["p_est"] = msg.angular.x
+            self.actual_data["q_est"] = msg.angular.y
+            self.actual_data["r_est"] = msg.angular.z
 
         # TODO: (check) Low-pass filter for acceleration estimate
         fc = 100.0
@@ -606,6 +532,31 @@ class AutoControlNode(Node):
         vdot_new = v - self.prev_speed
         self._lpf_many({"vdot": vdot_new}, alpha)
         self.prev_speed = v
+
+    def imu_callback(self, msg: Imu):
+        """Update attitude and angular-rate estimates from IMU."""
+        self.imu_received = True
+
+        self.actual_data["p_est"] = msg.angular_velocity.x
+        self.actual_data["q_est"] = msg.angular_velocity.y
+        self.actual_data["r_est"] = msg.angular_velocity.z
+        self.actual_data["ax_est"] = msg.linear_acceleration.x
+        self.actual_data["ay_est"] = msg.linear_acceleration.y
+        self.actual_data["az_est"] = msg.linear_acceleration.z
+
+        pose_q = np.array([
+            msg.orientation.w,
+            msg.orientation.x,
+            msg.orientation.y,
+            msg.orientation.z,
+        ])
+
+        SO3_pose = SO3Quat.elem(ca.horzcat(pose_q))
+        SO3_321 = SO3EulerB321.from_Quat(SO3_pose).param
+
+        self.actual_data["roll_est"] = float(SO3_321[2])
+        self.actual_data["pitch_est"] = float(SO3_321[1])
+        self.actual_data["yaw_est"] = float(SO3_321[0])
 
     def actual_pose_callback(self, msg: PoseStamped):
         """Update position and attitude estimates from pose message."""

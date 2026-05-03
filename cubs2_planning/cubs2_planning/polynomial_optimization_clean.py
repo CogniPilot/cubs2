@@ -480,6 +480,150 @@ def plot_derivatives(polynomials, segment_times, title="Trajectory Derivatives")
     return fig, axes
 
 
+def plot_xyz(x_polynomials, y_polynomials, z_polynomials, segment_times, title="XYZ Trajectory"):
+    """
+    Plot a 3D xyz position trajectory from three piecewise polynomial sets.
+
+    Args:
+        x_polynomials: Array of shape (segments, order+1) for x axis
+        y_polynomials: Array of shape (segments, order+1) for y axis
+        z_polynomials: Array of shape (segments, order+1) for z axis
+        segment_times: List of segment durations
+        title: Plot title
+
+    Returns:
+        tuple: (figure, ax) matplotlib objects
+    """
+    gamma = [0]
+    for tau in segment_times:
+        gamma.append(gamma[-1] + tau)
+
+    t_eval = np.linspace(0, gamma[-1], 1000)
+
+    x = np.zeros_like(t_eval)
+    y = np.zeros_like(t_eval)
+    z = np.zeros_like(t_eval)
+
+    vx = np.zeros_like(t_eval)
+    vy = np.zeros_like(t_eval)
+    vz = np.zeros_like(t_eval)
+    ax = np.zeros_like(t_eval)
+    ay = np.zeros_like(t_eval)
+    az = np.zeros_like(t_eval)
+    jx = np.zeros_like(t_eval)
+    jy = np.zeros_like(t_eval)
+    jz = np.zeros_like(t_eval)
+
+    derivatives_x = [None] * len(x_polynomials)
+    for k in range(len(x_polynomials)):
+        derivatives_x[k] = [
+            np.array(x_polynomials[k]),  # 0th: position
+            compute_polynomial_derivative(x_polynomials[k], 1),  # 1st: velocity
+            compute_polynomial_derivative(x_polynomials[k], 2),  # 2nd: acceleration
+            compute_polynomial_derivative(x_polynomials[k], 3),  # 3rd: jerk
+        ]
+    
+    derivatives_y = [None] * len(y_polynomials)
+    for k in range(len(y_polynomials)):
+        derivatives_y[k] = [
+            np.array(y_polynomials[k]),  # 0th: position
+            compute_polynomial_derivative(y_polynomials[k], 1),  # 1st: velocity
+            compute_polynomial_derivative(y_polynomials[k], 2),  # 2nd: acceleration
+            compute_polynomial_derivative(y_polynomials[k], 3),  # 3rd: jerk
+        ]
+
+    derivatives_z = [None] * len(z_polynomials)
+    for k in range(len(z_polynomials)):
+        derivatives_z[k] = [
+            np.array(z_polynomials[k]),  # 0th: position
+            compute_polynomial_derivative(z_polynomials[k], 1),  # 1st: velocity
+            compute_polynomial_derivative(z_polynomials[k], 2),  # 2nd: acceleration
+            compute_polynomial_derivative(z_polynomials[k], 3),  # 3rd: jerk
+        ]
+
+    for i, t in enumerate(t_eval):
+        for k in range(len(segment_times)):
+            if gamma[k] <= t <= gamma[k + 1]:
+                t_local = t - gamma[k]
+                x[i] = np.polyval(np.array(x_polynomials[k])[::-1], t_local)
+                y[i] = np.polyval(np.array(y_polynomials[k])[::-1], t_local)
+                z[i] = np.polyval(np.array(z_polynomials[k])[::-1], t_local)
+
+                vx[i] = (
+                    np.polyval(derivatives_x[k][1][::-1], t_local)
+                    if len(derivatives_x[k][1]) > 0
+                    else 0
+                )
+                vy[i] = (
+                    np.polyval(derivatives_y[k][1][::-1], t_local)
+                    if len(derivatives_y[k][1]) > 0
+                    else 0
+                )
+                vz[i] = (
+                    np.polyval(derivatives_z[k][1][::-1], t_local)
+                    if len(derivatives_z[k][1]) > 0
+                    else 0
+                )
+
+                ax[i] = (
+                    np.polyval(derivatives_x[k][2][::-1], t_local)
+                    if len(derivatives_x[k][2]) > 0
+                    else 0
+                )
+                ay[i] = (
+                    np.polyval(derivatives_y[k][2][::-1], t_local)
+                    if len(derivatives_y[k][2]) > 0
+                    else 0
+                )
+                az[i] = (
+                    np.polyval(derivatives_z[k][2][::-1], t_local)
+                    if len(derivatives_z[k][2]) > 0
+                    else 0
+                )
+                jx[i] = (
+                    np.polyval(derivatives_x[k][3][::-1], t_local)
+                    if len(derivatives_x[k][3]) > 0
+                    else 0
+                )
+                jy[i] = (
+                    np.polyval(derivatives_y[k][3][::-1], t_local)
+                    if len(derivatives_y[k][3]) > 0
+                    else 0
+                )
+                jz[i] = (
+                    np.polyval(derivatives_z[k][3][::-1], t_local)
+                    if len(derivatives_z[k][3]) > 0
+                    else 0
+                )
+
+                break
+
+    fig = plt.figure(figsize=(10, 8))
+    axes = fig.add_subplot(111, projection="3d")
+
+    axes.plot(x, y, z, "b-", linewidth=2)
+
+    # Mark segment boundary points
+    for k in range(len(segment_times) + 1):
+        t_local = 0.0
+        seg = min(k, len(segment_times) - 1)
+        if k == len(segment_times):
+            t_local = segment_times[-1]
+            seg = len(segment_times) - 1
+        bx = np.polyval(np.array(x_polynomials[seg])[::-1], t_local)
+        by = np.polyval(np.array(y_polynomials[seg])[::-1], t_local)
+        bz = np.polyval(np.array(z_polynomials[seg])[::-1], t_local)
+        axes.scatter(bx, by, bz, color="k", s=40, zorder=5)
+
+    axes.set_xlabel("x", fontsize=11)
+    axes.set_ylabel("y", fontsize=11)
+    axes.set_zlabel("z", fontsize=11)
+    axes.set_title(title, fontsize=13, fontweight="bold")
+    print("hi")
+    plt.tight_layout()
+    return fig, axes, x, y , z, vx, vy, vz, ax, ay, az, jx, jy, jz, t_eval
+
+
 # ============================================================================
 # Optimization Function
 # ============================================================================
