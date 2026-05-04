@@ -105,12 +105,12 @@ def convert_x_to_group(x_vec):
 
     return X_ca
 
-def calculate_control(X_bar, X_group, omega_bar, T_bar, omega_tilde_prev, T_tilde_prev, Kp, Kv, Kr):
+def calculate_control(X_bar, X_group, omega_bar, T_bar, omega_tilde_prev, T_tilde_prev, Fbar, A_tilde, Kp, Kv, Kr, m=0.065):
     eta_i = X_bar.inverse()*X_group
     xi = eta_i.log()  # log map to Lie algebra
     xi_param = xi.param
 
-    Jlinv = xi.left_jacobian_inv()
+    Jlinv = xi.right_jacobian_inv()
 
     c1 = Jlinv[:3,:3]
     c2 = Jlinv[:3,3:6]
@@ -132,26 +132,56 @@ def calculate_control(X_bar, X_group, omega_bar, T_bar, omega_tilde_prev, T_tild
         0, 0, 0
     )  # desired attitude feedforward (simplified)
 
-    xi_v_des = -c3 @ omega_tilde_prev - (c2/m) @ T_tilde_prev - Kp @ xi_p
+    # throw new error here make it F_tidle
+
+    F_tilde_prev = A_tilde + T_tilde_prev
+    # xi_v_des = - Kp @ xi_p -c3 @ omega_tilde_prev - (c2) @ F_tilde_prev/m 
+    xi_v_des = - Kp @ xi_p -c3 @ omega_tilde_prev - (c2) @ T_tilde_prev/m 
     e_v = xi_v - xi_v_des
 
     a_des = (  # desired acceleration, expressed in reference frame
                     - Kv @ e_v  # velocity feedback, expressed in reference frame
-                    - xi_v_des_dot  # desired acceleration feedforward, expressed in reference frame
-                    - ca.cross(
-                        omega_bar, xi_v_des
-                    )
-                    - c3 @ omega_tilde_prev
+                    + xi_v_des_dot  # desired acceleration feedforward, expressed in reference frame
+                    # - ca.cross(
+                    #     -omega_bar, xi_v_des
+                    # )
+                    - c4 @ omega_tilde_prev
                 )
 
-    T_tilde = ca.dot(a_des, ca.vertcat(1,0,0))/(c1/m)[0,0] 
+    A_vec = a_des - c1@A_tilde/m
+    
+    # a1 = ca.dot(a_des, ca.vertcat(1,0,0))
+    # a2 = ca.dot(a_des, ca.vertcat(0,1,0))
+    # a3 = ca.dot(a_des, ca.vertcat(0,0,1))
+    
+    G = -Fbar/m
 
+    G1 = G[0]
+    G2 = G[1]
+    G3 = G[2]
 
-    Tau = -T_bar[0]/m
-    xi_rd_x = 0
-    xi_rd_y = (ca.dot(a_des, ca.vertcat(0,0,1)) - T_tilde * (c1/m)[2,0]) / Tau
-    xi_rd_z = (ca.dot(a_des, ca.vertcat(0,1,0)) - T_tilde * (c1/m)[1,0]) / (-Tau)
-    xi_R_des = ca.vertcat(xi_rd_x, xi_rd_y, xi_rd_z)
+    C1 = c1[0,0]/m
+    C2 = c1[1,0]/m
+    C3 = c1[2,0]/m
+
+    M = ca.vertcat(ca.horzcat(C1, -G3, G2),
+    ca.horzcat(C2, 0, -G1),
+    ca.horzcat(C3, G1, 0))
+    Txi = ca.inv(M)@A_vec
+
+    print(np.round(np.array(ca.DM(ca.inv(M))),3))
+    print(np.round(np.array(ca.DM(A_vec)),3))
+
+    # Tau = -T_bar[0]/m
+    # T_tilde = m * a1 / c1[0,0]
+    # xi_rd_y = (a3 - 0*c1[1,0]/m * T_tilde)/Tau
+    # xi_rd_z = (a2 - 0*c1[2,0]/m * T_tilde)/(-Tau)
+
+    T_tilde = Txi[0]
+    xi_rd_y = Txi[1]
+    xi_rd_z = Txi[2]
+
+    xi_R_des = ca.vertcat(0, xi_rd_y, xi_rd_z)
 
     e_R = xi_R - xi_R_des
 
@@ -162,7 +192,31 @@ def calculate_control(X_bar, X_group, omega_bar, T_bar, omega_tilde_prev, T_tild
     omega_tilde_prev =omega_tilde
     T_tilde_prev = ca.vertcat(T_tilde, 0, 0)
 
-    return T, omega, omega_tilde_prev, T_tilde_prev
+    return T, omega, omega_tilde_prev, T_tilde_prev, xi_p, xi_v, xi_R, e_v, e_R
+
+
+def getAeroForce(x_ref):
+    x = x_ref[0]
+    y = x_ref[1]
+    z = x_ref[2]
+    V = x_ref[3]
+    alpha = x_ref[4]
+    beta = x_ref[5]
+    chi = x_ref[6]
+    gamma = x_ref[7]
+    mu = x_ref[8]
+
+    
+    # Forces
+    CL = CL0 + CLa * alpha
+    CD = CD0 + k * CL**2
+    CY = CYb * beta
+
+    FX = 1/2 * rho * V**2 * S * (-CD) 
+    FY = 1/2 * rho * V**2 * S * CY    
+    FZ = 1/2 * rho * V**2 * S * (-CL)
+    # print(FX, FY, FZ)
+    return np.array([FX, FY, FZ])
 
 
 def simulate(t_vec, omega_vec, T_vec, x0, x_ref, lie_control=False):
@@ -197,16 +251,35 @@ def simulate(t_vec, omega_vec, T_vec, x0, x_ref, lie_control=False):
     omegas = []
     T_tildes = []
     omega_tildes = []
+    xi_ps = []
+    xi_vs = []
+    xi_Rs = []
+    e_Vs = []
+    e_Rs = []
 
     for i in range(N - 1):
         dt = t_vec[i + 1] - t_vec[i]
 
 
         if lie_control:
+            F_bar = getAeroForce(x_ref[i]) + np.array([T_vec[i], 0, 0])
+            A_tilde = getAeroForce(x_ref[i]) - getAeroForce(X[i])
+            # print(np.round(A_tilde,3))
+
+            R_aero2body = R(x_ref[i][4], axis=2) @ R(-x_ref[i][5], axis=3)
+
+            F_bar = R_aero2body@F_bar
+
+            m=0.065
+            g=9.81
+
+            # print('f bar', np.round(F_bar + R(x_ref[i][4], axis=2) @ R(-x_ref[i][5], axis=3) @ R(x_ref[i][8], axis=1) @ R(-x_ref[i][7], axis=2) @ R(-x_ref[i][6], axis=3)@np.array([0,0,m*g]),3))
+            A_tilde = R_aero2body@A_tilde
+
             X_bar = convert_x_to_group(x_ref[i])
             X_group = convert_x_to_group(X[i])
 
-            T, omega, omega_tilde, T_tilde = calculate_control(X_bar, X_group, omega_vec[i], np.array([T_vec[i], 0, 0]), omega_tilde, T_tilde, Kp=np.eye(3)*0.1, Kv=np.eye(3)*1.5, Kr=np.eye(3)*0.1) 
+            T, omega, omega_tilde, T_tilde, xi_p, xi_v, xi_R, e_V, e_R = calculate_control(X_bar, X_group, omega_vec[i], np.array([T_vec[i], 0, 0]), omega_tilde, T_tilde, F_bar, A_tilde, Kp=np.diag((1,1,1))*0.01, Kv=np.diag((1,1,1))*0.01, Kr=np.diag((1,1,1))*0.001)
 
             T = np.array(ca.DM(T)).flatten()
             omega = np.array(ca.DM(omega)).flatten()
@@ -217,12 +290,19 @@ def simulate(t_vec, omega_vec, T_vec, x0, x_ref, lie_control=False):
             omegas.append(omega)
             omega_tildes.append(omega_tilde)
             T_tildes.append(T_tilde)
+            xi_ps.append(np.array(ca.DM(xi_p)).flatten())
+            xi_vs.append(np.array(ca.DM(xi_v)).flatten())
+            xi_Rs.append(np.array(ca.DM(xi_R)).flatten())
+            e_Vs.append(np.array(ca.DM(e_V)).flatten())
+            e_Rs.append(np.array(ca.DM(e_R)).flatten())
+            
         else:
             T = [T_vec[i]]
             omega = omega_vec[i]
     
-        T = max(min(T[0], 0.3),0)
-        omega = np.clip(omega, -1, 1)
+        T = T[0]
+        T = max(min(T, 0.3),0)
+        omega = np.clip(omega, -2, 2)
 
         X[i + 1] = _rk4(X[i], omega, T, dt)
 
@@ -242,7 +322,12 @@ def simulate(t_vec, omega_vec, T_vec, x0, x_ref, lie_control=False):
         Ts,
         omegas,
         T_tildes,
-        omega_tildes
+        omega_tildes,
+        xi_ps,
+        xi_vs,
+        xi_Rs,
+        e_Vs,
+        e_Rs
     )
 
 def R(angle, axis):
@@ -273,6 +358,23 @@ if __name__ == '__main__':
 
     x_ref = np.array([x, y, z, V_val, alpha0, beta, chi, gamma, mu]).T
 
+    x_ref = x_ref[:500]
+    x = x[:500]
+    y = y[:500]
+    z = z[:500]
+    V_val = V_val[:500]
+    chi = chi[:500]
+    mu = mu[:500]
+    gamma = gamma[:500]
+    alpha0 = alpha0[:500]
+    beta = beta[:500]
+    p = p[:500]
+    q = q[:500]
+    r = r[:500]
+    T0 = T0[:500]
+
+    t = t[:500]
+
     Rs = []
     v_worlds = []
 
@@ -282,20 +384,78 @@ if __name__ == '__main__':
     x0 = [x[0], y[0], z[0], V_val[0], alpha0[0], beta[0], chi[0], gamma[0], mu[0]]
 
     # ── Run ───────────────────────────────────────────────────────────────────
-    t_s, x_s, y_s, z_s, V_s, chi_s, mu_s, gamma_s, alpha_s, beta_s, Ts, omegas, T_tildes, omega_tildes = simulate(t, omega, T, x0, x_ref, lie_control=True)
-    t_s_nocontrol, x_s_nocontrol, y_s_nocontrol, z_s_nocontrol, V_s_nocontrol, chi_s_nocontrol, mu_s_nocontrol, gamma_s_nocontrol, alpha_s_nocontrol, beta_s_nocontrol, Ts_nocontrol, omegas_nocontrol, T_tildes_nocontrol, omega_tildes_nocontrol = simulate(t, omega, T, x0, x_ref, lie_control=False)
+    t_s, x_s, y_s, z_s, V_s, chi_s, mu_s, gamma_s, alpha_s, beta_s, Ts, omegas, T_tildes, omega_tildes, xi_ps, xi_vs, xi_Rs, e_Vs, e_Rs = simulate(t, omega, T, x0, x_ref, lie_control=True)
+    t_s_nocontrol, x_s_nocontrol, y_s_nocontrol, z_s_nocontrol, V_s_nocontrol, chi_s_nocontrol, mu_s_nocontrol, gamma_s_nocontrol, alpha_s_nocontrol, beta_s_nocontrol, Ts_nocontrol, omegas_nocontrol, T_tildes_nocontrol, omega_tildes_nocontrol, *_ = simulate(t, omega, T, x0, x_ref, lie_control=False)
+
+    t_ctrl = t_s[1:]  # control outputs align with steps 1..N-1
+    xi_ps_arr = np.array(xi_ps)
+    xi_vs_arr = np.array(xi_vs)
+    xi_Rs_arr = np.array(xi_Rs)
+    e_Vs_arr = np.array(e_Vs)
+    e_Rs_arr = np.array(e_Rs)
+    omegas_arr = np.array(omegas)
+    omega_tildes_arr = np.array(omega_tildes)
+    T_tildes_arr = np.array(T_tildes)
+
+    # ── Lie-algebra error diagnostics ─────────────────────────────────────────
+    fig_err, axes_err = plt.subplots(5, 1, figsize=(20, 16), sharex=True)
+    fig_err.suptitle('Control Errors (Lie algebra coordinates)')
+
+    for j, lbl in enumerate(['x', 'y', 'z']):
+        axes_err[0].plot(t_ctrl, xi_ps_arr[:, j], label=f'xi_p[{lbl}]')
+    axes_err[0].set_ylabel('xi_p (pos error)'); axes_err[0].legend(fontsize=8); axes_err[0].grid(True, alpha=0.3)
+    axes_err[0].set_ylim([-10,10])
+
+    for j, lbl in enumerate(['x', 'y', 'z']):
+        axes_err[1].plot(t_ctrl, xi_vs_arr[:, j], label=f'xi_v[{lbl}]')
+    axes_err[1].set_ylabel('xi_v (vel error)'); axes_err[1].legend(fontsize=8); axes_err[1].grid(True, alpha=0.3)
+    axes_err[1].set_ylim([-10,10])
 
 
-    # print(Ts[:][0])
-    fig, axes = plt.subplots(2, 1) 
-    print(t_s[1:])
-    axes[0].plot(t_s[1:], Ts)
-    axes[0].plot(t_s[1:], T_tildes)
-    axes[0].set_ylim([-0.1,0.3])
+    for j, lbl in enumerate(['x', 'y', 'z']):
+        axes_err[2].plot(t_ctrl, xi_Rs_arr[:, j], label=f'xi_R[{lbl}]')
+    axes_err[2].set_ylabel('xi_R (att error)'); axes_err[2].set_xlabel('time (s)')
+    axes_err[2].legend(fontsize=8); axes_err[2].grid(True, alpha=0.3)
+    axes_err[2].set_ylim([-2,2])
 
-    axes[1].plot(t_s[1:], omegas)
-    axes[1].plot(t_s[1:], omega_tildes)
-    axes[1].set_ylim([-1,1])
+
+    for j, lbl in enumerate(['x', 'y', 'z']):
+        axes_err[3].plot(t_ctrl, e_Vs_arr[:, j], label=f'xi_R[{lbl}]')
+    axes_err[3].set_ylabel('e_V (att error)'); axes_err[3].set_xlabel('time (s)')
+    axes_err[3].set_ylim([-10,10])
+
+    for j, lbl in enumerate(['x', 'y', 'z']):
+        axes_err[4].plot(t_ctrl, e_Rs_arr[:, j], label=f'xi_R[{lbl}]')
+    axes_err[4].set_ylabel('e_R (att error)'); axes_err[4].set_xlabel('time (s)')
+    axes_err[4].set_ylim([-1,1])
+
+    plt.tight_layout()
+
+    # ── Control variable diagnostics ──────────────────────────────────────────
+    fig_ctrl, axes_ctrl = plt.subplots(2, 2, figsize=(12, 7), sharex=True)
+    fig_ctrl.suptitle('Control Variables')
+
+    axes_ctrl[0, 0].plot(t_ctrl, Ts, label='T (total)')
+    axes_ctrl[0, 0].set_ylim([-0.1, 0.35]); axes_ctrl[0, 0].set_ylabel('N')
+    axes_ctrl[0, 0].set_title('Thrust'); axes_ctrl[0, 0].legend(fontsize=8); axes_ctrl[0, 0].grid(True, alpha=0.3)
+
+    axes_ctrl[0, 1].plot(t_ctrl, T_tildes_arr, label=[r'$\tilde{T}_x$', r'$\tilde{T}_y$', r'$\tilde{T}_z$'])
+    axes_ctrl[0, 1].set_ylabel('N'); axes_ctrl[0, 1].set_title('Thrust correction (T_tilde)')
+    axes_ctrl[0, 1].legend(fontsize=8); axes_ctrl[0, 1].grid(True, alpha=0.3)
+
+    for j, lbl in enumerate(['p', 'q', 'r']):
+        axes_ctrl[1, 0].plot(t_ctrl, omegas_arr[:, j], label=lbl)
+    axes_ctrl[1, 0].set_ylim([-1.1, 1.1]); axes_ctrl[1, 0].set_ylabel('rad/s')
+    axes_ctrl[1, 0].set_title('Body rates (omega)'); axes_ctrl[1, 0].set_xlabel('time (s)')
+    axes_ctrl[1, 0].legend(fontsize=8); axes_ctrl[1, 0].grid(True, alpha=0.3)
+
+    for j, lbl in enumerate(['p', 'q', 'r']):
+        axes_ctrl[1, 1].plot(t_ctrl, omega_tildes_arr[:, j], label=f'~{lbl}')
+    axes_ctrl[1, 1].set_ylim([-1.1, 1.1]); axes_ctrl[1, 1].set_ylabel('rad/s')
+    axes_ctrl[1, 1].set_title('Rate correction (omega_tilde)'); axes_ctrl[1, 1].set_xlabel('time (s)')
+    axes_ctrl[1, 1].legend(fontsize=8); axes_ctrl[1, 1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
     plt.show()
 
     for a_loop, b_loop, chi_loop, gamma_loop, mu_loop, V_loop in zip(alpha_s, beta_s, chi_s, gamma_s, mu_s, V_s):    
@@ -319,12 +479,12 @@ if __name__ == '__main__':
     gs  = plt.GridSpec(3, 2, figure=fig, hspace=0.45, wspace=0.35)
 
     ax3 = fig.add_subplot(gs[:, 0], projection='3d')
-    ax3.plot(x_s, y_s, z_s, 'b-', linewidth=2)
-    ax3.plot(x_s_nocontrol, y_s_nocontrol, z_s_nocontrol, 'gray', linestyle='--', linewidth=1)
+    ax3.plot(x_s, y_s, -z_s, 'b-', linewidth=2)
+    ax3.plot(x_s_nocontrol, y_s_nocontrol, -z_s_nocontrol, 'gray', linestyle='--', linewidth=1)
     ax3.plot(x, y, z, 'r--', linewidth=2)
-    ax3.scatter(x_s[0],  y_s[0],  z_s[0],  color='g', s=60, zorder=5, label='start')
-    ax3.scatter(x_s[-1], y_s[-1], z_s[-1], color='r', s=60, zorder=5, label='end')
-    half = max(np.ptp(x_s), np.ptp(y_s), max(np.ptp(z_s), 1.0)) / 2
+    ax3.scatter(x_s[0],  y_s[0],  -z_s[0],  color='g', s=60, zorder=5, label='start')
+    ax3.scatter(x_s[-1], y_s[-1], -z_s[-1], color='r', s=60, zorder=5, label='end')
+    half = max(np.ptp(x_s), np.ptp(y_s), max(np.ptp(-z_s), 1.0)) / 2
     for set_lim, mid in zip([ax3.set_xlim, ax3.set_ylim, ax3.set_zlim],
                             [(x_s.max()+x_s.min())/2,
                              (y_s.max()+y_s.min())/2,
@@ -336,10 +496,14 @@ if __name__ == '__main__':
     ax1 = fig.add_subplot(gs[0, 1])
     ax1.plot(t_s, np.degrees(chi_s),   label='χ chi')
     ax1.plot(t, np.degrees(chi), label='χ chi (analytic)')
+    ax1.plot(t_s_nocontrol, np.degrees(chi_s_nocontrol))
     ax1.plot(t_s, np.degrees(mu_s),    label='μ mu')
     ax1.plot(t, np.degrees(mu), label='μ mu (analytic)')
+    ax1.plot(t_s_nocontrol, np.degrees(mu_s_nocontrol))
     ax1.plot(t_s, np.degrees(gamma_s), label='γ gamma')
     ax1.plot(t, np.degrees(gamma), label='γ gamma (analytic)')
+    ax1.plot(t_s_nocontrol, np.degrees(gamma_s_nocontrol))
+
     ax1.set_ylabel('deg'); ax1.set_title('Course / Bank / Climb')
     ax1.legend(fontsize=8); ax1.grid(True, alpha=0.3)
 
@@ -398,7 +562,7 @@ if __name__ == '__main__':
 
     # ── Arrays from plan_path ──────────────────────────────────────────────────────
     t_arr   = np.array(t)
-    x_arr, y_arr, z_arr = np.array(x_s), np.array(y_s), np.array(z_s)
+    x_arr, y_arr, z_arr = np.array(x_s), np.array(y_s), np.array(-z_s)
     chi_arr, mu_arr, gam_arr = np.array(chi_s), -np.array(mu_s), np.array(gamma_s)
     alp_arr, bet_arr         = np.array(alpha_s), np.array(beta_s)
 

@@ -2,24 +2,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from polynomial_optimization import run_poly_optimization, plot_piecewise_polynomials, plot_derivatives
 from polynomial_optimization_clean import plot_xyz
-
+import casadi as ca
 
 # X boundary conditions
 
 def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
 
     # Path setup
-    seg_distances = [20, 10 * np.pi * 2/4 *1.25, 10 * np.pi * 2/4 *1.25]  # Segment durations
+    seg_distances = [20, 10 * np.pi * 2/4 *1.25, 10 * np.pi * 2/4 *1.25, 40, 10,10]  # Segment durations
 
     for j in range(1):
-        x_boundary_positions = [[0, 0, 10, 20]]
-        x_boundary_velocities = [[0, None, None, None]]
-        x_boundary_accelerations = [[0, None, None, 0]]
-        x_boundary_jerk = [[None, None, None, None]]
-        x_boundary_snap = [[None, None, None, None]]
-        x_boundary_crackle = [[None, None, None, None]]
-        x_boundary_pop = [[None, None, None, None]]
-        x_boundary_lock = [[None, None, None, None]]
+        x_boundary_positions = [[0, 0, 10, 20, 20, 20, 20]]
+        x_boundary_velocities = [[0, None, None, None, None, None, None]]
+        x_boundary_accelerations = [[0, None, None, None, None, None, 0]]
+        x_boundary_jerk = [[None, None, None, None, None, None, None]]
+        x_boundary_snap = [[None, None, None, None, None, None, None]]
+        x_boundary_crackle = [[None, None, None, None, None, None, None]]
+        x_boundary_pop = [[None, None, None, None, None, None, None]]
+        x_boundary_lock = [[None, None, None, None, None, None, None]]
         x_boundary_conditions = [
             x_boundary_positions,
             x_boundary_velocities,
@@ -32,14 +32,14 @@ def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
         ]
 
         # Y boundary conditions
-        y_boundary_positions = [[0, 20, 30, 20]]
-        y_boundary_velocities = [[V, None, None, None]]
-        y_boundary_accelerations = [[None, None, None, 0]]
-        y_boundary_jerk = [[None, None, None, None]]
-        y_boundary_snap = [[None, None, None, None]]
-        y_boundary_crackle = [[None, None, None, None]]
-        y_boundary_pop = [[None, None, None, None]]
-        y_boundary_lock = [[None, None, None, None]]
+        y_boundary_positions = [[0, 20, 30, 20, -20, -30, -40]]
+        y_boundary_velocities = [[8, None, None, None, None, None, None]]
+        y_boundary_accelerations = [[None, None, None, None, None, None, 0]]
+        y_boundary_jerk = [[None, None, None, None, None, None, None]]
+        y_boundary_snap = [[None, None, None, None, None, None, None]]
+        y_boundary_crackle = [[None, None, None, None, None, None, None]]
+        y_boundary_pop = [[None, None, None, None, None, None, None]]
+        y_boundary_lock = [[None, None, None, None, None, None, None]]
         y_boundary_conditions = [
             y_boundary_positions,
             y_boundary_velocities,
@@ -52,14 +52,14 @@ def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
         ]
 
         # Z boundary conditions
-        z_boundary_positions = [[0, None, None, 0]]
-        z_boundary_velocities = [[None, None, None, None]]
-        z_boundary_accelerations = [[None, None, None, None]]
-        z_boundary_jerk = [[None, None, None, None]]
-        z_boundary_snap = [[None, None, None, None]]
-        z_boundary_crackle = [[None, None, None, None]]
-        z_boundary_pop = [[None, None, None, None]]
-        z_boundary_lock = [[None, None, None, None]]
+        z_boundary_positions = [[0, None, None, None, None, None, 0]]
+        z_boundary_velocities = [[None, None, None, None, None, None, None]]
+        z_boundary_accelerations = [[None, None, None, None, None, None, None]]
+        z_boundary_jerk = [[None, None, None, None, None, None, None]]
+        z_boundary_snap = [[None, None, None, None, None, None, None]]
+        z_boundary_crackle = [[None, None, None, None, None, None, None]]
+        z_boundary_pop = [[None, None, None, None, None, None, None]]
+        z_boundary_lock = [[None, None, None, None, None, None, None]]
         z_boundary_conditions = [
             z_boundary_positions,
             z_boundary_velocities,
@@ -71,16 +71,18 @@ def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
             z_boundary_lock
         ]
 
+
+
         # Define acceleration discontinuities (jumps in 2nd derivative)
         continuity_changes = None
-        tau = [seg_distance/V for seg_distance in seg_distances]
+        tau = [seg_distance/8 for seg_distance in seg_distances]
 
         # Solve optimization problem
         outputsx = run_poly_optimization(
             order=7,
             tau=tau,
-            segments=3,
-            weights=[0, 0, 0.1, 0.1, 1000, 0.1, 0.1, 0.1],  # Minimize snap (4th derivative)
+            segments=6,
+            weights=[0, 0, 10, 0.1, 1000, 0.1, 0.1, 0.1],  # Minimize snap (4th derivative)
             boundary_conditions=x_boundary_conditions,
             continuity=continuity_changes
         )
@@ -88,8 +90,8 @@ def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
         outputsy = run_poly_optimization(
             order=7,
             tau=tau,
-            segments=3,
-            weights=[0, 0, 0.1, 0.1, 1000, 0.1, 0.1, 0.1],  # Minimize snap (4th derivative)
+            segments=6,
+            weights=[0, 0, 10, 0.1, 1000, 0.1, 0.1, 0.1],  # Minimize snap (4th derivative)
             boundary_conditions=y_boundary_conditions,
             continuity=continuity_changes
         )
@@ -97,8 +99,8 @@ def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
         outputsz = run_poly_optimization(
             order=7,
             tau=tau,
-            segments=3,
-            weights=[0, 0, 0.1, 0.1, 1000, 0.1, 0.1, 0.1],  # Minimize snap (4th derivative)
+            segments=6,
+            weights=[0, 0, 10, 0.1, 1000, 0.1, 0.1, 0.1],  # Minimize snap (4th derivative)
             boundary_conditions=z_boundary_conditions,
             continuity=continuity_changes
         )
@@ -151,7 +153,7 @@ def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
     alpha0 = ((m*g / np.cos(mu)) / (1/2 * rho * V_analytic**2 * S) - CL0) / CLa
 
     # Alpha dot
-    alpha_dot = np.gradient(alpha0, t)
+    # alpha_dot = np.gradient(alpha0, t)
 
 
     '''Forces'''
@@ -168,6 +170,52 @@ def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
     Cd = CD0 + k * Cl**2
     T0 = (X_force + 1/2 * rho * V_analytic**2 * S * Cd)/np.cos(alpha0)
 
+
+
+    # Correct T and alpha
+
+    alphas = []
+    Ts = []
+
+    for V, X, Z, mu_i, T0_i, alpha0_i in zip(V_analytic, X_force, Z_force, mu, T0, alpha0):
+        opti = ca.Opti()
+
+        # Decision variables
+        alpha = opti.variable()
+        T = opti.variable()
+        qS = 1/2 * rho * S * V**2
+        eq1 = X + qS * (CD0 + k * (CL0 + CLa * alpha)**2) - T * ca.cos(alpha)
+        eq2 = Z + qS * (CL0 + CLa * alpha) + T * ca.sin(alpha) - m*g*ca.cos(mu_i)
+
+
+        # Add constraints (set equations = 0)
+        opti.subject_to(eq1 == 0)
+        opti.subject_to(eq2 == 0)
+
+        # Provide an initial guess (important for nonlinear problems)
+        opti.set_initial(T, T0_i)
+        opti.set_initial(alpha, alpha0_i)
+
+        # Solver options (optional but helps stability)
+        p_opts = {}
+        s_opts = {"print_level": 0}
+
+        opti.solver("ipopt", p_opts, s_opts)
+
+        # Solve
+        sol = opti.solve()
+
+        # Extract solution
+        x_sol = sol.value(alpha)
+        alphas.append(float(x_sol))
+        y_sol = sol.value(T)
+        Ts.append(float(y_sol))
+    
+    alphas = np.array(alphas)
+    Ts = np.array(Ts)
+
+    alpha_dot = np.gradient(alphas, t)
+
     # omega
     q = alpha_dot - Z_force/m/V_analytic
     r = Y_force * np.cos(alpha0) / m / V_analytic + mu_dot * np.sin(alpha0)
@@ -178,4 +226,5 @@ def plan_path(V, m, S, rho, g, CL0, CLa, CD0, k):
     gamma = np.zeros_like(alpha0)
 
 
-    return t, x, y ,z, V_analytic, chi, mu, gamma, alpha0, beta, p, q, r, T0
+
+    return t, x, y ,z, V_analytic, chi, mu, gamma, alphas, beta, p, q, r, Ts
